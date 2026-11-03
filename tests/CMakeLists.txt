@@ -8,6 +8,9 @@ add_executable(library_management_tests
     test_book_service.cpp
     test_book_copy_repository.cpp
     test_book_copy_service.cpp
+    test_member_model.cpp
+    test_member_repository.cpp
+    test_member_service.cpp
 )
 
 target_link_libraries(library_management_tests

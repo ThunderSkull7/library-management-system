@@ -48,10 +48,14 @@ add_library(library_management_lib STATIC
     src/models/Book.cpp
     src/models/BookCopy.cpp
     src/models/BookCopyStatus.cpp
+    src/models/Member.cpp
+    src/models/MemberStatus.cpp
     src/repositories/BookRepository.cpp
     src/repositories/BookCopyRepository.cpp
+    src/repositories/MemberRepository.cpp
     src/services/BookService.cpp
     src/services/BookCopyService.cpp
+    src/services/MemberService.cpp
     src/utils/ValidationUtils.cpp
 )
 

@@ -107,8 +107,45 @@ bool isValidIsoDate(const std::string& dateStr) {
     return true;
 }
 
+bool isValidEmail(const std::string& email) {
+    if (email.empty() || email.front() == '.' || email.back() == '.') {
+        return false;
+    }
+
+    // Must not contain any whitespace
+    for (char c : email) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+
+    size_t atPos = email.find('@');
+    if (atPos == std::string::npos || atPos == 0 || atPos >= email.length() - 1) {
+        return false;
+    }
+
+    // Must have only one '@' symbol
+    if (email.find('@', atPos + 1) != std::string::npos) {
+        return false;
+    }
+
+    // Character immediately preceding or following '@' must not be '.'
+    if (email[atPos - 1] == '.' || email[atPos + 1] == '.') {
+        return false;
+    }
+
+    // Must have at least one '.' after '@'
+    size_t dotPos = email.find('.', atPos + 2);
+    if (dotPos == std::string::npos || dotPos >= email.length() - 1) {
+        return false;
+    }
+
+    return true;
+}
+
 bool isValidPublicationYear(int year) {
     return year > 0 && year <= 2100;
 }
 
 } // namespace lms::utils
+

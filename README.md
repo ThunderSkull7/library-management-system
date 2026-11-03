@@ -2,7 +2,7 @@
 
 A modern, high-performance Library Management System built with **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
 
-> **Note**: This repository represents **Phase 2: Book Catalog & Physical Copy Management** (built upon the Phase 1 Foundation). It provides domain models, SQLite repositories, and business services for managing catalog titles (`Book`) and physical copies (`BookCopy`), with strict status validation and loan history safety. Member management, circulation checkout workflows, fines, and complete interactive CLI menus are planned for subsequent phases.
+> **Note**: This repository represents **Phase 3: Member Registration & Management** (built upon the Phase 1 Foundation and Phase 2 Book Catalog). It provides domain models, SQLite repositories, and business services for managing catalog titles (`Book`), physical copies (`BookCopy`), and library patrons (`Member`), with strict validation, status lifecycle control, and loan history safety. Circulation checkout workflows, fines, and complete interactive CLI menus are planned for subsequent phases.
 
 ---
 
@@ -14,7 +14,11 @@ The Library Management System is architected as a modular, extensible C++ applic
   - Independent domain models (`Book`, `BookCopy`, `BookCopyStatus`).
   - Parameterized SQLite repositories (`BookRepository`, `BookCopyRepository`) with RAII prepared statement handling.
   - Business services (`BookService`, `BookCopyService`) validating non-empty fields, publication year, ISO dates, duplicate checks, and status safety (preventing manual `OnLoan` transitions and preserving copies with loan history).
-  - 92 automated GoogleTests covering models, constraints, edge cases, and business logic.
+- **Phase 3: Member Registration & Management**:
+  - Independent domain model (`Member`) and status enum (`MemberStatus`: `Active`, `Suspended`, `Closed`).
+  - Parameterized SQLite repository (`MemberRepository`) handling nullable emails and phones, unique constraint violations, and status updates.
+  - Business service (`MemberService`) validating full names, basic email syntax (`user@domain.tld`), ISO calendar join dates, status lifecycles, and loan history preservation.
+  - 127 automated GoogleTests covering models, constraints, edge cases, and business logic.
 
 ---
 
@@ -170,13 +174,17 @@ LibraryManagementSystem/
 │   ├── models/
 │   │   ├── Book.hpp
 │   │   ├── BookCopy.hpp
-│   │   └── BookCopyStatus.hpp
+│   │   ├── BookCopyStatus.hpp
+│   │   ├── Member.hpp
+│   │   └── MemberStatus.hpp
 │   ├── repositories/
 │   │   ├── BookCopyRepository.hpp
-│   │   └── BookRepository.hpp
+│   │   ├── BookRepository.hpp
+│   │   └── MemberRepository.hpp
 │   ├── services/
 │   │   ├── BookCopyService.hpp
-│   │   └── BookService.hpp
+│   │   ├── BookService.hpp
+│   │   └── MemberService.hpp
 │   └── utils/
 │       ├── ValidationException.hpp
 │       └── ValidationUtils.hpp
@@ -189,13 +197,17 @@ LibraryManagementSystem/
 │   ├── models/
 │   │   ├── Book.cpp
 │   │   ├── BookCopy.cpp
-│   │   └── BookCopyStatus.cpp
+│   │   ├── BookCopyStatus.cpp
+│   │   ├── Member.cpp
+│   │   └── MemberStatus.cpp
 │   ├── repositories/
 │   │   ├── BookCopyRepository.cpp
-│   │   └── BookRepository.cpp
+│   │   ├── BookRepository.cpp
+│   │   └── MemberRepository.cpp
 │   ├── services/
 │   │   ├── BookCopyService.cpp
-│   │   └── BookService.cpp
+│   │   ├── BookService.cpp
+│   │   └── MemberService.cpp
 │   └── utils/
 │       └── ValidationUtils.cpp
 │
@@ -207,7 +219,10 @@ LibraryManagementSystem/
 │   ├── test_book_repository.cpp
 │   ├── test_book_service.cpp
 │   ├── test_book_copy_repository.cpp
-│   └── test_book_copy_service.cpp
+│   ├── test_book_copy_service.cpp
+│   ├── test_member_model.cpp
+│   ├── test_member_repository.cpp
+│   └── test_member_service.cpp
 │
 ├── docs/
 │   └── database_architecture.md # Detailed database design specification

@@ -26,8 +26,14 @@ std::optional<std::string> normalizeOptionalString(const std::optional<std::stri
 bool isValidIsoDate(const std::string& dateStr);
 
 /**
+ * @brief Validates that an email address has a sensible basic structure (user@domain.tld).
+ */
+bool isValidEmail(const std::string& email);
+
+/**
  * @brief Validates that a publication year is a sensible positive year (e.g. 1 to 2100).
  */
 bool isValidPublicationYear(int year);
 
 } // namespace lms::utils
+
