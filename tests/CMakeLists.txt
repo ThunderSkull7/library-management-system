@@ -11,6 +11,12 @@ add_executable(library_management_tests
     test_member_model.cpp
     test_member_repository.cpp
     test_member_service.cpp
+    test_loan_model.cpp
+    test_library_policy.cpp
+    test_date_utils.cpp
+    test_transaction.cpp
+    test_loan_repository.cpp
+    test_loan_service.cpp
 )
 
 target_link_libraries(library_management_tests

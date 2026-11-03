@@ -319,12 +319,12 @@ TEST_F(SchemaManagerTest, LoanCheckConstraintsEnforced) {
 
 TEST_F(SchemaManagerTest, RepeatedInitializationIsIdempotent) {
     schemaManager_->initializeSchema();
-    EXPECT_EQ(schemaManager_->getSchemaVersion(), 1);
+    EXPECT_EQ(schemaManager_->getSchemaVersion(), lms::database::SchemaManager::CURRENT_SCHEMA_VERSION);
 
     // Call initializeSchema multiple times
     EXPECT_NO_THROW(schemaManager_->initializeSchema());
     EXPECT_NO_THROW(schemaManager_->initializeSchema());
-    EXPECT_EQ(schemaManager_->getSchemaVersion(), 1);
+    EXPECT_EQ(schemaManager_->getSchemaVersion(), lms::database::SchemaManager::CURRENT_SCHEMA_VERSION);
 }
 
 TEST_F(SchemaManagerTest, ExistingRecordsSurviveRepeatedInitialization) {
@@ -371,6 +371,38 @@ TEST_F(SchemaManagerTest, InvalidForeignKeyReferencesRejected) {
     EXPECT_THROW(connection_->execute(
         "INSERT INTO loans (copy_id, member_id, issued_on, due_on) VALUES (1, 9999, '2026-02-01', '2026-02-15');"),
         lms::database::DatabaseException);
+}
+
+TEST_F(SchemaManagerTest, LoanPaymentsTableExists) {
+    schemaManager_->initializeSchema();
+    EXPECT_TRUE(tableExists("loan_payments"));
+    auto cols = getTableColumns("loan_payments");
+    EXPECT_TRUE(cols.contains("id"));
+    EXPECT_TRUE(cols.contains("loan_id"));
+    EXPECT_TRUE(cols.contains("amount_minor_units"));
+    EXPECT_TRUE(cols.contains("paid_on"));
+}
+
+TEST_F(SchemaManagerTest, MigrationFromV1ToV2PreservesData) {
+    // 1. Manually set up a V1 schema database
+    connection_->execute("PRAGMA user_version = 1;");
+    connection_->execute("CREATE TABLE books (id INTEGER PRIMARY KEY, title TEXT, author TEXT);");
+    connection_->execute("INSERT INTO books (id, title, author) VALUES (10, 'Legacy Book', 'Legacy Author');");
+
+    EXPECT_EQ(schemaManager_->getSchemaVersion(), 1);
+
+    // 2. Run initializeSchema to trigger migration to V2
+    schemaManager_->initializeSchema();
+    EXPECT_EQ(schemaManager_->getSchemaVersion(), 2);
+    EXPECT_TRUE(tableExists("loan_payments"));
+
+    // 3. Verify existing data is preserved
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(connection_->getRawHandle(), "SELECT title FROM books WHERE id = 10;", -1, &stmt, nullptr);
+    ASSERT_EQ(rc, SQLITE_OK);
+    ASSERT_EQ(sqlite3_step(stmt), SQLITE_ROW);
+    EXPECT_STREQ(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)), "Legacy Book");
+    sqlite3_finalize(stmt);
 }
 
 } // namespace

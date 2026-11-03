@@ -2,7 +2,7 @@
 
 A modern, high-performance Library Management System built with **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
 
-> **Note**: This repository represents **Phase 3: Member Registration & Management** (built upon the Phase 1 Foundation and Phase 2 Book Catalog). It provides domain models, SQLite repositories, and business services for managing catalog titles (`Book`), physical copies (`BookCopy`), and library patrons (`Member`), with strict validation, status lifecycle control, and loan history safety. Circulation checkout workflows, fines, and complete interactive CLI menus are planned for subsequent phases.
+> **Note**: This repository represents **Phase 4: Loan Checkout, Returns & Fine Calculation** (built upon the Phase 1 Foundation, Phase 2 Book Catalog, and Phase 3 Member Management). It provides domain models, SQLite repositories, atomic RAII transactions, and business services for circulation checkouts, returns, fine calculations in integer paise, payment tracking, and policy enforcement. Search, reporting, and complete interactive CLI menus are planned for subsequent phases.
 
 ---
 
@@ -18,7 +18,14 @@ The Library Management System is architected as a modular, extensible C++ applic
   - Independent domain model (`Member`) and status enum (`MemberStatus`: `Active`, `Suspended`, `Closed`).
   - Parameterized SQLite repository (`MemberRepository`) handling nullable emails and phones, unique constraint violations, and status updates.
   - Business service (`MemberService`) validating full names, basic email syntax (`user@domain.tld`), ISO calendar join dates, status lifecycles, and loan history preservation.
-  - 127 automated GoogleTests covering models, constraints, edge cases, and business logic.
+- **Phase 4: Loan Checkout, Returns & Fine Calculation**:
+  - Independent domain models: `Loan`, `LoanPayment`, and `LibraryPolicy`.
+  - Date calculations using C++20 `<chrono>` calendar (`DateUtils`).
+  - RAII Transaction manager (`Transaction`) guaranteeing atomic operations (`BEGIN IMMEDIATE`, `COMMIT`, `ROLLBACK`).
+  - Schema migration to Version 2 introducing the `loan_payments` table and foreign key index.
+  - Repository (`LoanRepository`) for loans, active loan queries, overdue queries, outstanding fines, and payment records.
+  - Business service (`LoanService`) enforcing borrowing limits, copy availability, member status verification, overdue fines in integer minor units (paise: ₹2 = 200 paise/day), grace periods, maximum fine caps, and partial/full fine payments.
+  - 181 automated GoogleTests covering all models, policies, repositories, services, and transactions.
 
 ---
 
@@ -91,15 +98,15 @@ Execute the compiled executable from the build directory:
 
 ### Debug Mode
 ```powershell
-.\build\debug\library_management_system.exe
+.\build\debug\Debug\library_management_system.exe
 ```
 
 ### Release Mode
 ```powershell
-.\build\release\library_management_system.exe
+.\build\release\Release\library_management_system.exe
 ```
 
-Upon successful startup, the application verifies the connection, ensures the `data/` directory and `data/library.db` database exist, initializes the schema to version 1, and outputs:
+Upon successful startup, the application verifies the connection, ensures the `data/` directory and `data/library.db` database exist, initializes the schema to version 2, and outputs:
 ```text
 ========================================
        LIBRARY MANAGEMENT SYSTEM        
@@ -107,7 +114,7 @@ Upon successful startup, the application verifies the connection, ensures the `d
 
 Database connection: Successful
 Database schema: Initialized
-Schema version: 1
+Schema version: 2
 
 Library Management System foundation
 is ready.
@@ -127,7 +134,7 @@ ctest --preset windows-msvc-debug
 ```
 or directly run the test binary:
 ```powershell
-.\build\debug\tests\library_management_tests.exe
+.\build\debug\tests\Debug\library_management_tests.exe
 ```
 
 ### Run Release Tests
@@ -137,9 +144,9 @@ ctest --preset windows-msvc-release
 
 ---
 
-## 9. Initial Database Schema Overview
+## 9. Database Schema Overview (Schema Version 2)
 
-The foundation creates four core tables:
+The database schema manages five core tables:
 
 1. **`books`**: Stores catalog metadata (id, title, author, publisher, publication_year, category, description, and unique nullable ISBN).
 2. **`book_copies`**: Tracks individual physical copies (id, book_id FK, accession_number UNIQUE, status CHECK, acquired_on).
@@ -148,6 +155,8 @@ The foundation creates four core tables:
    - Valid statuses: `Active`, `Suspended`, `Closed`.
 4. **`loans`**: Tracks checkouts and returns (id, copy_id FK, member_id FK, issued_on, due_on, returned_on, fine_minor_units CHECK, fine_paid CHECK).
    - Partial unique index: `one_active_loan_per_copy` (`loans(copy_id) WHERE returned_on IS NULL`) guarantees that a physical copy cannot be checked out multiple times simultaneously.
+5. **`loan_payments`** (introduced in Schema V2): Tracks partial and full fine payments made against returned loans (id, loan_id FK, amount_minor_units CHECK, paid_on).
+   - Index: `idx_loan_payments_loan_id` for efficient payment aggregation.
 
 Detailed documentation is available in [docs/database_architecture.md](docs/database_architecture.md).
 
@@ -170,22 +179,29 @@ LibraryManagementSystem/
 │   │   ├── DatabaseConnection.hpp
 │   │   ├── DatabaseException.hpp
 │   │   ├── PreparedStatement.hpp
-│   │   └── SchemaManager.hpp
+│   │   ├── SchemaManager.hpp
+│   │   └── Transaction.hpp
 │   ├── models/
 │   │   ├── Book.hpp
 │   │   ├── BookCopy.hpp
 │   │   ├── BookCopyStatus.hpp
+│   │   ├── LibraryPolicy.hpp
+│   │   ├── Loan.hpp
+│   │   ├── LoanPayment.hpp
 │   │   ├── Member.hpp
 │   │   └── MemberStatus.hpp
 │   ├── repositories/
 │   │   ├── BookCopyRepository.hpp
 │   │   ├── BookRepository.hpp
+│   │   ├── LoanRepository.hpp
 │   │   └── MemberRepository.hpp
 │   ├── services/
 │   │   ├── BookCopyService.hpp
 │   │   ├── BookService.hpp
+│   │   ├── LoanService.hpp
 │   │   └── MemberService.hpp
 │   └── utils/
+│       ├── DateUtils.hpp
 │       ├── ValidationException.hpp
 │       └── ValidationUtils.hpp
 │
@@ -193,22 +209,29 @@ LibraryManagementSystem/
 │   ├── main.cpp                # Application entry point
 │   ├── database/
 │   │   ├── DatabaseConnection.cpp
-│   │   └── SchemaManager.cpp
+│   │   ├── SchemaManager.cpp
+│   │   └── Transaction.cpp
 │   ├── models/
 │   │   ├── Book.cpp
 │   │   ├── BookCopy.cpp
 │   │   ├── BookCopyStatus.cpp
+│   │   ├── LibraryPolicy.cpp
+│   │   ├── Loan.cpp
+│   │   ├── LoanPayment.cpp
 │   │   ├── Member.cpp
 │   │   └── MemberStatus.cpp
 │   ├── repositories/
 │   │   ├── BookCopyRepository.cpp
 │   │   ├── BookRepository.cpp
+│   │   ├── LoanRepository.cpp
 │   │   └── MemberRepository.cpp
 │   ├── services/
 │   │   ├── BookCopyService.cpp
 │   │   ├── BookService.cpp
+│   │   ├── LoanService.cpp
 │   │   └── MemberService.cpp
 │   └── utils/
+│       ├── DateUtils.cpp
 │       └── ValidationUtils.cpp
 │
 ├── tests/
@@ -222,7 +245,13 @@ LibraryManagementSystem/
 │   ├── test_book_copy_service.cpp
 │   ├── test_member_model.cpp
 │   ├── test_member_repository.cpp
-│   └── test_member_service.cpp
+│   ├── test_member_service.cpp
+│   ├── test_loan_model.cpp
+│   ├── test_library_policy.cpp
+│   ├── test_date_utils.cpp
+│   ├── test_transaction.cpp
+│   ├── test_loan_repository.cpp
+│   └── test_loan_service.cpp
 │
 ├── docs/
 │   └── database_architecture.md # Detailed database design specification
@@ -230,4 +259,3 @@ LibraryManagementSystem/
 └── data/
     └── .gitkeep                # Application runtime database directory
 ```
-

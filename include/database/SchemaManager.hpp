@@ -9,7 +9,7 @@ namespace lms::database {
  */
 class SchemaManager {
 public:
-    static constexpr int CURRENT_SCHEMA_VERSION = 1;
+    static constexpr int CURRENT_SCHEMA_VERSION = 2;
 
     explicit SchemaManager(DatabaseConnection& connection);
 
@@ -29,6 +29,8 @@ private:
 
     void setSchemaVersion(int version);
     void createTablesAndIndexes();
+    void createVersion2TablesAndIndexes();
+    void migrateV1ToV2();
 };
 
 } // namespace lms::database

@@ -45,17 +45,24 @@ endif()
 add_library(library_management_lib STATIC
     src/database/DatabaseConnection.cpp
     src/database/SchemaManager.cpp
+    src/database/Transaction.cpp
     src/models/Book.cpp
     src/models/BookCopy.cpp
     src/models/BookCopyStatus.cpp
+    src/models/LibraryPolicy.cpp
+    src/models/Loan.cpp
+    src/models/LoanPayment.cpp
     src/models/Member.cpp
     src/models/MemberStatus.cpp
     src/repositories/BookRepository.cpp
     src/repositories/BookCopyRepository.cpp
+    src/repositories/LoanRepository.cpp
     src/repositories/MemberRepository.cpp
     src/services/BookService.cpp
     src/services/BookCopyService.cpp
+    src/services/LoanService.cpp
     src/services/MemberService.cpp
+    src/utils/DateUtils.cpp
     src/utils/ValidationUtils.cpp
 )
 

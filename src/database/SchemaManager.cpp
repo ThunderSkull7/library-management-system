@@ -45,9 +45,17 @@ void SchemaManager::initializeSchema() {
 
     connection_.execute("BEGIN IMMEDIATE;");
     try {
-        createTablesAndIndexes();
-        if (currentVersion < CURRENT_SCHEMA_VERSION) {
+        if (currentVersion == 0) {
+            createTablesAndIndexes();
+            createVersion2TablesAndIndexes();
             setSchemaVersion(CURRENT_SCHEMA_VERSION);
+        } else if (currentVersion == 1) {
+            migrateV1ToV2();
+            setSchemaVersion(CURRENT_SCHEMA_VERSION);
+        } else {
+            // Idempotent re-initialization
+            createTablesAndIndexes();
+            createVersion2TablesAndIndexes();
         }
         connection_.execute("COMMIT;");
     } catch (...) {
@@ -58,6 +66,27 @@ void SchemaManager::initializeSchema() {
         }
         throw;
     }
+}
+
+void SchemaManager::migrateV1ToV2() {
+    createVersion2TablesAndIndexes();
+}
+
+void SchemaManager::createVersion2TablesAndIndexes() {
+    // 6. loan_payments table (Phase 4 fine payment tracking)
+    connection_.execute(R"sql(
+        CREATE TABLE IF NOT EXISTS loan_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            loan_id INTEGER NOT NULL,
+            amount_minor_units INTEGER NOT NULL CHECK(amount_minor_units > 0),
+            paid_on TEXT NOT NULL,
+            FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE RESTRICT
+        );
+    )sql");
+
+    connection_.execute(R"sql(
+        CREATE INDEX IF NOT EXISTS idx_loan_payments_loan_id ON loan_payments(loan_id);
+    )sql");
 }
 
 void SchemaManager::createTablesAndIndexes() {
