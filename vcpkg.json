@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "library-management-system",
+  "version-string": "1.0.0",
+  "description": "Modern C++20 Library Management System foundation with SQLite and GoogleTest.",
+  "dependencies": [
+    "sqlite3"
+  ],
+  "features": {
+    "tests": {
+      "description": "Dependencies required for building unit and integration tests.",
+      "dependencies": [
+        "gtest"
+      ]
+    }
+  }
+}
+

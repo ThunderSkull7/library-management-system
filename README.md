@@ -1,0 +1,192 @@
+# Library Management System
+
+A modern, high-performance Library Management System built with **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
+
+> **Note**: This repository represents **Phase 1: Project Foundation & Database Architecture**. It establishes core project infrastructure, RAII database connection management, transactional schema initialization, and comprehensive unit tests. Higher-level business features (such as book cataloging, member registration, circulation workflows, fine management, and CLI menus) are planned for subsequent phases.
+
+---
+
+## 1. Project Overview
+
+The Library Management System is architected as a modular, extensible C++ application designed for physical library operations. Phase 1 delivers:
+- **RAII SQLite3 Connection Manager**: Guaranteed resource cleanup, busy timeout handling, move semantics, and mandatory foreign-key enforcement with verification.
+- **Transactional Schema Manager**: Schema migration support using SQLite's `user_version`, rejecting future unsupported schemas, and ensuring idempotent table and index creation.
+- **Core Relational Schema**: 4 normalized tables (`books`, `book_copies`, `members`, `loans`), with CHECK constraints and partial unique indexes for real-world consistency.
+- **Automated Test Suite**: Comprehensive GoogleTest test suite covering connection lifecycles, constraints, and edge cases.
+
+---
+
+## 2. Technology Stack
+
+- **Language Standard**: C++20 (`/std:c++20`)
+- **Target OS**: Windows 11 (MSVC 2022 x64 toolchain)
+- **Build System**: CMake 3.20+ with CMake Presets
+- **Dependency Manager**: vcpkg in manifest mode (`vcpkg.json`)
+- **Database Engine**: SQLite 3
+- **Unit Testing**: GoogleTest (gtest) via CTest
+
+---
+
+## 3. Prerequisites
+
+Before building the project, ensure the following are installed:
+
+- **Visual Studio 2022** (or Visual Studio Build Tools 2022) with the "Desktop development with C++" workload (MSVC v143 toolchain).
+- **CMake** (v3.20 or newer).
+- **vcpkg**: Microsoft C++ Library Manager. Ensure the environment variable `VCPKG_ROOT` points to your vcpkg installation (e.g., `C:\vcpkg`).
+- **Git** for version control.
+
+---
+
+## 4. vcpkg Setup
+
+The project uses **vcpkg manifest mode** via `vcpkg.json`. When CMake configures the project, vcpkg automatically resolves, downloads, and compiles all declared dependencies (`sqlite3` and `gtest` for the test feature).
+
+Ensure `VCPKG_ROOT` is configured in your environment:
+```powershell
+$env:VCPKG_ROOT = "C:\vcpkg"
+```
+
+---
+
+## 5. CMake Configuration Instructions
+
+Configure using the provided CMake presets:
+
+### Debug Configuration
+```powershell
+cmake --preset windows-msvc-debug
+```
+
+### Release Configuration
+```powershell
+cmake --preset windows-msvc-release
+```
+
+---
+
+## 6. Build Instructions
+
+### Debug Build
+```powershell
+cmake --build --preset windows-msvc-debug
+```
+
+### Release Build
+```powershell
+cmake --build --preset windows-msvc-release
+```
+
+---
+
+## 7. How to Run the Application
+
+Execute the compiled executable from the build directory:
+
+### Debug Mode
+```powershell
+.\build\debug\library_management_system.exe
+```
+
+### Release Mode
+```powershell
+.\build\release\library_management_system.exe
+```
+
+Upon successful startup, the application verifies the connection, ensures the `data/` directory and `data/library.db` database exist, initializes the schema to version 1, and outputs:
+```text
+========================================
+       LIBRARY MANAGEMENT SYSTEM        
+========================================
+
+Database connection: Successful
+Database schema: Initialized
+Schema version: 1
+
+Library Management System foundation
+is ready.
+
+========================================
+```
+
+---
+
+## 8. How to Run Tests
+
+Run the full GoogleTest suite using CTest:
+
+### Run Debug Tests
+```powershell
+ctest --preset windows-msvc-debug
+```
+or directly run the test binary:
+```powershell
+.\build\debug\tests\library_management_tests.exe
+```
+
+### Run Release Tests
+```powershell
+ctest --preset windows-msvc-release
+```
+
+---
+
+## 9. Initial Database Schema Overview
+
+The foundation creates four core tables:
+
+1. **`books`**: Stores catalog metadata (id, title, author, publisher, publication_year, category, description, and unique nullable ISBN).
+2. **`book_copies`**: Tracks individual physical copies (id, book_id FK, accession_number UNIQUE, status CHECK, acquired_on).
+   - Valid statuses: `Available`, `On Loan`, `Lost`, `Damaged`, `Withdrawn`.
+3. **`members`**: Tracks registered patrons (id, full_name, email UNIQUE, phone, joined_on, status CHECK).
+   - Valid statuses: `Active`, `Suspended`, `Closed`.
+4. **`loans`**: Tracks checkouts and returns (id, copy_id FK, member_id FK, issued_on, due_on, returned_on, fine_minor_units CHECK, fine_paid CHECK).
+   - Partial unique index: `one_active_loan_per_copy` (`loans(copy_id) WHERE returned_on IS NULL`) guarantees that a physical copy cannot be checked out multiple times simultaneously.
+
+Detailed documentation is available in [docs/database_architecture.md](docs/database_architecture.md).
+
+---
+
+## 10. Project Directory Structure
+
+```text
+LibraryManagementSystem/
+│
+├── CMakeLists.txt              # Root build configuration
+├── CMakePresets.json           # Presets for Windows MSVC Debug & Release
+├── vcpkg.json                  # Dependency manifest (sqlite3, gtest)
+├── .gitignore                  # Git ignore rules for build and runtime data
+├── .clang-format               # Code formatting configuration
+├── README.md                   # Project documentation
+│
+├── include/
+│   ├── database/
+│   │   ├── DatabaseConnection.hpp
+│   │   ├── DatabaseException.hpp
+│   │   └── SchemaManager.hpp
+│   ├── models/                 # Reserved for Phase 2+ models
+│   ├── repositories/           # Reserved for Phase 2+ repositories
+│   ├── services/               # Reserved for Phase 2+ business logic
+│   └── utils/                  # Reserved for utility functions
+│
+├── src/
+│   ├── main.cpp                # Application entry point
+│   ├── database/
+│   │   ├── DatabaseConnection.cpp
+│   │   └── SchemaManager.cpp
+│   ├── repositories/
+│   ├── services/
+│   └── utils/
+│
+├── tests/
+│   ├── CMakeLists.txt          # Test build configuration
+│   ├── test_database_connection.cpp
+│   └── test_schema_manager.cpp
+│
+├── docs/
+│   └── database_architecture.md # Detailed database design specification
+│
+└── data/
+    └── .gitkeep                # Application runtime database directory
+```
+
