@@ -45,6 +45,14 @@ endif()
 add_library(library_management_lib STATIC
     src/database/DatabaseConnection.cpp
     src/database/SchemaManager.cpp
+    src/models/Book.cpp
+    src/models/BookCopy.cpp
+    src/models/BookCopyStatus.cpp
+    src/repositories/BookRepository.cpp
+    src/repositories/BookCopyRepository.cpp
+    src/services/BookService.cpp
+    src/services/BookCopyService.cpp
+    src/utils/ValidationUtils.cpp
 )
 
 target_include_directories(library_management_lib

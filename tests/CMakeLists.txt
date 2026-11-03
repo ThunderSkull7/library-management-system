@@ -3,6 +3,11 @@ find_package(GTest CONFIG REQUIRED)
 add_executable(library_management_tests
     test_database_connection.cpp
     test_schema_manager.cpp
+    test_book_model.cpp
+    test_book_repository.cpp
+    test_book_service.cpp
+    test_book_copy_repository.cpp
+    test_book_copy_service.cpp
 )
 
 target_link_libraries(library_management_tests

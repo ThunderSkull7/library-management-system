@@ -2,17 +2,19 @@
 
 A modern, high-performance Library Management System built with **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
 
-> **Note**: This repository represents **Phase 1: Project Foundation & Database Architecture**. It establishes core project infrastructure, RAII database connection management, transactional schema initialization, and comprehensive unit tests. Higher-level business features (such as book cataloging, member registration, circulation workflows, fine management, and CLI menus) are planned for subsequent phases.
+> **Note**: This repository represents **Phase 2: Book Catalog & Physical Copy Management** (built upon the Phase 1 Foundation). It provides domain models, SQLite repositories, and business services for managing catalog titles (`Book`) and physical copies (`BookCopy`), with strict status validation and loan history safety. Member management, circulation checkout workflows, fines, and complete interactive CLI menus are planned for subsequent phases.
 
 ---
 
 ## 1. Project Overview
 
-The Library Management System is architected as a modular, extensible C++ application designed for physical library operations. Phase 1 delivers:
-- **RAII SQLite3 Connection Manager**: Guaranteed resource cleanup, busy timeout handling, move semantics, and mandatory foreign-key enforcement with verification.
-- **Transactional Schema Manager**: Schema migration support using SQLite's `user_version`, rejecting future unsupported schemas, and ensuring idempotent table and index creation.
-- **Core Relational Schema**: 4 normalized tables (`books`, `book_copies`, `members`, `loans`), with CHECK constraints and partial unique indexes for real-world consistency.
-- **Automated Test Suite**: Comprehensive GoogleTest test suite covering connection lifecycles, constraints, and edge cases.
+The Library Management System is architected as a modular, extensible C++ application designed for physical library operations:
+- **Phase 1: Foundation & Database Architecture**: RAII SQLite3 connection management, foreign-key enforcement, busy timeouts, transactional migrations via `user_version`, normalized tables (`books`, `book_copies`, `members`, `loans`), and partial unique indexes.
+- **Phase 2: Book Catalog & Physical Copy Management**:
+  - Independent domain models (`Book`, `BookCopy`, `BookCopyStatus`).
+  - Parameterized SQLite repositories (`BookRepository`, `BookCopyRepository`) with RAII prepared statement handling.
+  - Business services (`BookService`, `BookCopyService`) validating non-empty fields, publication year, ISO dates, duplicate checks, and status safety (preventing manual `OnLoan` transitions and preserving copies with loan history).
+  - 92 automated GoogleTests covering models, constraints, edge cases, and business logic.
 
 ---
 
@@ -163,25 +165,49 @@ LibraryManagementSystem/
 │   ├── database/
 │   │   ├── DatabaseConnection.hpp
 │   │   ├── DatabaseException.hpp
+│   │   ├── PreparedStatement.hpp
 │   │   └── SchemaManager.hpp
-│   ├── models/                 # Reserved for Phase 2+ models
-│   ├── repositories/           # Reserved for Phase 2+ repositories
-│   ├── services/               # Reserved for Phase 2+ business logic
-│   └── utils/                  # Reserved for utility functions
+│   ├── models/
+│   │   ├── Book.hpp
+│   │   ├── BookCopy.hpp
+│   │   └── BookCopyStatus.hpp
+│   ├── repositories/
+│   │   ├── BookCopyRepository.hpp
+│   │   └── BookRepository.hpp
+│   ├── services/
+│   │   ├── BookCopyService.hpp
+│   │   └── BookService.hpp
+│   └── utils/
+│       ├── ValidationException.hpp
+│       └── ValidationUtils.hpp
 │
 ├── src/
 │   ├── main.cpp                # Application entry point
 │   ├── database/
 │   │   ├── DatabaseConnection.cpp
 │   │   └── SchemaManager.cpp
+│   ├── models/
+│   │   ├── Book.cpp
+│   │   ├── BookCopy.cpp
+│   │   └── BookCopyStatus.cpp
 │   ├── repositories/
+│   │   ├── BookCopyRepository.cpp
+│   │   └── BookRepository.cpp
 │   ├── services/
+│   │   ├── BookCopyService.cpp
+│   │   └── BookService.cpp
 │   └── utils/
+│       └── ValidationUtils.cpp
 │
 ├── tests/
 │   ├── CMakeLists.txt          # Test build configuration
 │   ├── test_database_connection.cpp
-│   └── test_schema_manager.cpp
+│   ├── test_schema_manager.cpp
+│   ├── test_book_model.cpp
+│   ├── test_book_repository.cpp
+│   ├── test_book_service.cpp
+│   ├── test_book_copy_repository.cpp
+│   └── test_book_copy_service.cpp
 │
 ├── docs/
 │   └── database_architecture.md # Detailed database design specification
