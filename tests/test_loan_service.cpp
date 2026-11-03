@@ -1,5 +1,7 @@
 #include "database/DatabaseConnection.hpp"
+#include "database/DatabaseException.hpp"
 #include "database/SchemaManager.hpp"
+#include "database/Transaction.hpp"
 #include "models/Book.hpp"
 #include "models/BookCopy.hpp"
 #include "models/BookCopyStatus.hpp"
@@ -15,8 +17,12 @@
 #include "utils/ValidationException.hpp"
 
 #include <gtest/gtest.h>
+#include <chrono>
+#include <filesystem>
+#include <future>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -308,6 +314,355 @@ TEST_F(LoanServiceTest, QueryMethods) {
     auto outstandingFines = loanService_->getOutstandingFines();
     ASSERT_EQ(outstandingFines.size(), 1);
     EXPECT_EQ(outstandingFines[0].getId(), l1.getId());
+}
+
+TEST_F(LoanServiceTest, CheckoutFailureRollbackLeavesStateUnchanged) {
+    // 1. Inactive member checkout attempt
+    EXPECT_THROW((void)loanService_->checkoutBook(memberSuspendedId_, copy1Id_, "2026-03-01"), utils::ValidationException);
+
+    // Verify copy1 is still Available and no loans were created
+    auto copy = copyRepo_->getCopyById(copy1Id_);
+    ASSERT_TRUE(copy.has_value());
+    EXPECT_EQ(copy->getStatus(), models::BookCopyStatus::Available);
+    EXPECT_TRUE(loanRepo_->getAllLoans().empty());
+    EXPECT_FALSE(loanRepo_->hasActiveLoanForCopy(copy1Id_));
+
+    // 2. Member exceeding loan limit attempt
+    models::LibraryPolicy strictPolicy(14, 200, 1);
+    loanService_->setPolicy(strictPolicy);
+
+    (void)loanService_->checkoutBook(memberActiveId_, copy1Id_, "2026-03-01");
+    EXPECT_EQ(loanRepo_->getAllLoans().size(), 1);
+
+    // Attempting 2nd checkout should fail
+    EXPECT_THROW((void)loanService_->checkoutBook(memberActiveId_, copy2Id_, "2026-03-01"), utils::ValidationException);
+
+    // copy2 must remain Available and total loans must remain 1
+    auto copy2 = copyRepo_->getCopyById(copy2Id_);
+    ASSERT_TRUE(copy2.has_value());
+    EXPECT_EQ(copy2->getStatus(), models::BookCopyStatus::Available);
+    EXPECT_EQ(loanRepo_->getAllLoans().size(), 1);
+    EXPECT_FALSE(loanRepo_->hasActiveLoanForCopy(copy2Id_));
+}
+
+TEST_F(LoanServiceTest, ReturnFailureRollbackLeavesStateUnchanged) {
+    auto loan = loanService_->checkoutBook(memberActiveId_, copy1Id_, "2026-03-10");
+
+    // Invalid return date (preceding issue date)
+    EXPECT_THROW((void)loanService_->returnBook(copy1Id_, "2026-03-05"), utils::ValidationException);
+
+    // Verify copy is still OnLoan
+    auto copy = copyRepo_->getCopyById(copy1Id_);
+    ASSERT_TRUE(copy.has_value());
+    EXPECT_EQ(copy->getStatus(), models::BookCopyStatus::OnLoan);
+
+    // Verify loan is still active and unchanged
+    auto loanAfterFail = loanService_->getLoan(loan.getId());
+    EXPECT_TRUE(loanAfterFail.isActive());
+    EXPECT_FALSE(loanAfterFail.getReturnedOn().has_value());
+    EXPECT_EQ(loanAfterFail.getFineMinorUnits(), 0);
+    EXPECT_FALSE(loanAfterFail.isFinePaid());
+}
+
+TEST_F(LoanServiceTest, SuspendedOrClosedMemberCanReturnBook) {
+    // Member checks out book while Active
+    (void)loanService_->checkoutBook(memberActiveId_, copy1Id_, "2026-03-01");
+
+    // Member later becomes Suspended
+    memberRepo_->updateMemberStatus(memberActiveId_, models::MemberStatus::Suspended);
+
+    // Member returns copy 3 days late
+    auto returnedLoan = loanService_->returnBook(copy1Id_, "2026-03-18");
+
+    EXPECT_TRUE(returnedLoan.isReturned());
+    EXPECT_EQ(returnedLoan.getFineMinorUnits(), 600); // 3 * 200 paise
+
+    auto copy = copyRepo_->getCopyById(copy1Id_);
+    ASSERT_TRUE(copy.has_value());
+    EXPECT_EQ(copy->getStatus(), models::BookCopyStatus::Available);
+
+    // Member checks out second copy while Active, then becomes Closed
+    memberRepo_->updateMemberStatus(memberActiveId_, models::MemberStatus::Active);
+    (void)loanService_->checkoutBook(memberActiveId_, copy2Id_, "2026-03-01");
+    memberRepo_->updateMemberStatus(memberActiveId_, models::MemberStatus::Closed);
+
+    auto returnedLoan2 = loanService_->returnBook(copy2Id_, "2026-03-15");
+    EXPECT_TRUE(returnedLoan2.isReturned());
+    EXPECT_EQ(returnedLoan2.getFineMinorUnits(), 0);
+}
+
+TEST_F(LoanServiceTest, PaymentFailureRollbackLeavesStateUnchanged) {
+    (void)loanService_->checkoutBook(memberActiveId_, copy1Id_, "2026-03-01");
+    auto returnedLoan = loanService_->returnBook(copy1Id_, "2026-03-18"); // 3 days late -> 600 paise fine
+    int loanId = returnedLoan.getId();
+
+    // Overpayment attempt
+    EXPECT_THROW(loanService_->payFine(loanId, 700, "2026-03-19"), utils::ValidationException);
+
+    // Zero payment attempt
+    EXPECT_THROW(loanService_->payFine(loanId, 0, "2026-03-19"), utils::ValidationException);
+
+    // Verify no payments were recorded and status is still unpaid
+    EXPECT_EQ(loanRepo_->getTotalPaidForLoan(loanId), 0);
+    EXPECT_TRUE(loanRepo_->getPaymentsForLoan(loanId).empty());
+    EXPECT_EQ(loanService_->getRemainingFine(loanId), 600);
+
+    auto loanState = loanService_->getLoan(loanId);
+    EXPECT_EQ(loanState.getFineMinorUnits(), 600);
+    EXPECT_FALSE(loanState.isFinePaid());
+}
+
+TEST_F(LoanServiceTest, AccountingInvariantPreservesAssessedFineOnPartialAndFinalPayments) {
+    (void)loanService_->checkoutBook(memberActiveId_, copy1Id_, "2026-03-01");
+    auto returnedLoan = loanService_->returnBook(copy1Id_, "2026-03-21"); // 6 days late -> 1200 paise fine
+    int loanId = returnedLoan.getId();
+
+    EXPECT_EQ(returnedLoan.getFineMinorUnits(), 1200);
+
+    // Partial payment 1: 500 paise
+    loanService_->payFine(loanId, 500, "2026-03-22");
+    auto loanP1 = loanService_->getLoan(loanId);
+    // Assessed fine must remain 1200, never reduced to 700
+    EXPECT_EQ(loanP1.getFineMinorUnits(), 1200);
+    EXPECT_FALSE(loanP1.isFinePaid());
+    EXPECT_EQ(loanRepo_->getTotalPaidForLoan(loanId), 500);
+    EXPECT_EQ(loanService_->getRemainingFine(loanId), 700);
+
+    // Partial payment 2: 300 paise
+    loanService_->payFine(loanId, 300, "2026-03-23");
+    auto loanP2 = loanService_->getLoan(loanId);
+    EXPECT_EQ(loanP2.getFineMinorUnits(), 1200);
+    EXPECT_FALSE(loanP2.isFinePaid());
+    EXPECT_EQ(loanRepo_->getTotalPaidForLoan(loanId), 800);
+    EXPECT_EQ(loanService_->getRemainingFine(loanId), 400);
+
+    // Final payment: 400 paise
+    loanService_->payFine(loanId, 400, "2026-03-24");
+    auto loanFinal = loanService_->getLoan(loanId);
+    EXPECT_EQ(loanFinal.getFineMinorUnits(), 1200);
+    EXPECT_TRUE(loanFinal.isFinePaid());
+    EXPECT_EQ(loanRepo_->getTotalPaidForLoan(loanId), 1200);
+    EXPECT_EQ(loanService_->getRemainingFine(loanId), 0);
+
+    // Re-verify payment history records 3 distinct entries
+    auto payments = loanService_->getPaymentsForLoan(loanId);
+    ASSERT_EQ(payments.size(), 3);
+    EXPECT_EQ(payments[0].getAmountMinorUnits(), 500);
+    EXPECT_EQ(payments[1].getAmountMinorUnits(), 300);
+    EXPECT_EQ(payments[2].getAmountMinorUnits(), 400);
+}
+
+// -----------------------------------------------------------------------------
+// Concurrency Test Suite using dual SQLite connections on a shared file database
+// -----------------------------------------------------------------------------
+class LoanConcurrencyTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        testDbPath_ = std::filesystem::temp_directory_path() / "lms_circ_concurrency.db";
+        if (std::filesystem::exists(testDbPath_)) {
+            std::filesystem::remove(testDbPath_);
+        }
+
+        // Connection 1 opens and sets up schema & seed data
+        conn1_.open(testDbPath_);
+        schemaManager1_ = std::make_unique<database::SchemaManager>(conn1_);
+        schemaManager1_->initializeSchema();
+
+        bookRepo1_ = std::make_unique<repositories::BookRepository>(conn1_);
+        copyRepo1_ = std::make_unique<repositories::BookCopyRepository>(conn1_);
+        memberRepo1_ = std::make_unique<repositories::MemberRepository>(conn1_);
+        loanRepo1_ = std::make_unique<repositories::LoanRepository>(conn1_);
+        service1_ = std::make_unique<services::LoanService>(*loanRepo1_, *copyRepo1_, *memberRepo1_, conn1_);
+
+        models::Book book("Concurrency in Action", "Anthony Williams");
+        bookId_ = bookRepo1_->addBook(book);
+
+        models::BookCopy copy1(bookId_, "ACC-CONC-1", models::BookCopyStatus::Available);
+        copyId_ = copyRepo1_->addCopy(copy1);
+
+        models::Member m1("Alice User", "2026-01-01", "alice@test.org");
+        member1Id_ = memberRepo1_->addMember(m1);
+
+        models::Member m2("Bob User", "2026-01-01", "bob@test.org");
+        member2Id_ = memberRepo1_->addMember(m2);
+
+        // Connection 2 opens the same database file
+        conn2_.open(testDbPath_);
+        copyRepo2_ = std::make_unique<repositories::BookCopyRepository>(conn2_);
+        memberRepo2_ = std::make_unique<repositories::MemberRepository>(conn2_);
+        loanRepo2_ = std::make_unique<repositories::LoanRepository>(conn2_);
+        service2_ = std::make_unique<services::LoanService>(*loanRepo2_, *copyRepo2_, *memberRepo2_, conn2_);
+    }
+
+    void TearDown() override {
+        service2_.reset();
+        loanRepo2_.reset();
+        copyRepo2_.reset();
+        memberRepo2_.reset();
+        conn2_.close();
+
+        service1_.reset();
+        loanRepo1_.reset();
+        copyRepo1_.reset();
+        memberRepo1_.reset();
+        schemaManager1_.reset();
+        conn1_.close();
+
+        if (std::filesystem::exists(testDbPath_)) {
+            std::filesystem::remove(testDbPath_);
+        }
+    }
+
+    std::filesystem::path testDbPath_;
+    database::DatabaseConnection conn1_;
+    database::DatabaseConnection conn2_;
+
+    std::unique_ptr<database::SchemaManager> schemaManager1_;
+    std::unique_ptr<repositories::BookRepository> bookRepo1_;
+    std::unique_ptr<repositories::BookCopyRepository> copyRepo1_;
+    std::unique_ptr<repositories::MemberRepository> memberRepo1_;
+    std::unique_ptr<repositories::LoanRepository> loanRepo1_;
+    std::unique_ptr<services::LoanService> service1_;
+
+    std::unique_ptr<repositories::BookCopyRepository> copyRepo2_;
+    std::unique_ptr<repositories::MemberRepository> memberRepo2_;
+    std::unique_ptr<repositories::LoanRepository> loanRepo2_;
+    std::unique_ptr<services::LoanService> service2_;
+
+    int bookId_{0};
+    int copyId_{0};
+    int member1Id_{0};
+    int member2Id_{0};
+};
+
+TEST_F(LoanConcurrencyTest, TwoConnectionsCannotCheckOutSameCopyConcurrentlyDeterministic) {
+    // 1. Connection 1 acquires immediate write lock via Transaction
+    database::Transaction tx1(conn1_);
+
+    // Set conn2 busy timeout to short duration so it doesn't block indefinitely
+    conn2_.execute("PRAGMA busy_timeout = 50;");
+
+    // 2. While Connection 1 holds immediate transaction, Connection 2 attempts checkout.
+    // Because checkout starts with BEGIN IMMEDIATE, conn2 fails to acquire the write lock.
+    EXPECT_THROW((void)service2_->checkoutBook(member2Id_, copyId_, "2026-03-01"), database::DatabaseException);
+
+    // Rollback conn1 holding transaction
+    tx1.rollback();
+
+    // 3. Now Connection 1 completes checkout cleanly
+    auto loan1 = service1_->checkoutBook(member1Id_, copyId_, "2026-03-01");
+    EXPECT_GT(loan1.getId(), 0);
+
+    // 4. Connection 2 attempts checkout of the same copy; inside its transaction it reads
+    // copy status as OnLoan, rejecting the checkout
+    EXPECT_THROW((void)service2_->checkoutBook(member2Id_, copyId_, "2026-03-01"), utils::ValidationException);
+
+    // Only one loan exists in the database
+    EXPECT_EQ(loanRepo1_->getAllLoans().size(), 1);
+    EXPECT_TRUE(loanRepo2_->hasActiveLoanForCopy(copyId_));
+}
+
+TEST_F(LoanConcurrencyTest, TwoConnectionsConcurrentCheckoutThreadRace) {
+    std::promise<void> startSignal;
+    std::shared_future<void> startFuture(startSignal.get_future());
+
+    auto checkoutTask = [&](services::LoanService* service, int memberId) -> bool {
+        startFuture.wait(); // Synchronize thread start
+        try {
+            service->checkoutBook(memberId, copyId_, "2026-03-01");
+            return true;
+        } catch (...) {
+            return false;
+        }
+    };
+
+    auto f1 = std::async(std::launch::async, checkoutTask, service1_.get(), member1Id_);
+    auto f2 = std::async(std::launch::async, checkoutTask, service2_.get(), member2Id_);
+
+    startSignal.set_value(); // Unblock both threads simultaneously
+
+    bool res1 = f1.get();
+    bool res2 = f2.get();
+
+    // Exactly one thread must succeed; both cannot succeed
+    EXPECT_NE(res1, res2);
+    EXPECT_TRUE(res1 || res2);
+
+    // Database must reflect exactly 1 loan
+    EXPECT_EQ(loanRepo1_->getAllLoans().size(), 1);
+    auto copy = copyRepo1_->getCopyById(copyId_);
+    ASSERT_TRUE(copy.has_value());
+    EXPECT_EQ(copy->getStatus(), models::BookCopyStatus::OnLoan);
+}
+
+TEST_F(LoanConcurrencyTest, ConcurrentFinePaymentsCannotExceedAssessedFineDeterministic) {
+    // Check out and return 5 days late -> fine is 1000 paise
+    (void)service1_->checkoutBook(member1Id_, copyId_, "2026-03-01");
+    auto loan = service1_->returnBook(copyId_, "2026-03-20");
+    int loanId = loan.getId();
+    EXPECT_EQ(loan.getFineMinorUnits(), 1000);
+
+    // Connection 1 pays 600 paise
+    service1_->payFine(loanId, 600, "2026-03-21");
+    EXPECT_EQ(loanRepo1_->getTotalPaidForLoan(loanId), 600);
+    EXPECT_EQ(service1_->getRemainingFine(loanId), 400);
+
+    // Connection 2 now attempts to pay 600 paise (which exceeds the 400 paise balance)
+    // Because payFine executes its balance check INSIDE BEGIN IMMEDIATE, it sees alreadyPaid = 600
+    // and throws ValidationException
+    EXPECT_THROW(service2_->payFine(loanId, 600, "2026-03-21"), utils::ValidationException);
+
+    // Total paid is still 600, not 1200
+    EXPECT_EQ(loanRepo2_->getTotalPaidForLoan(loanId), 600);
+
+    // Connection 2 pays the remaining 400 paise -> succeeds and settles loan
+    EXPECT_NO_THROW(service2_->payFine(loanId, 400, "2026-03-21"));
+    EXPECT_EQ(loanRepo2_->getTotalPaidForLoan(loanId), 1000);
+    EXPECT_EQ(service2_->getRemainingFine(loanId), 0);
+
+    auto finalLoan = service1_->getLoan(loanId);
+    EXPECT_TRUE(finalLoan.isFinePaid());
+    EXPECT_EQ(finalLoan.getFineMinorUnits(), 1000); // Accounting invariant preserved
+}
+
+TEST_F(LoanConcurrencyTest, ConcurrentFinePaymentsThreadRace) {
+    // Check out and return 5 days late -> fine is 1000 paise
+    (void)service1_->checkoutBook(member1Id_, copyId_, "2026-03-01");
+    auto loan = service1_->returnBook(copyId_, "2026-03-20");
+    int loanId = loan.getId();
+
+    // Both threads attempt to pay 700 paise each against a 1000 paise fine
+    std::promise<void> startSignal;
+    std::shared_future<void> startFuture(startSignal.get_future());
+
+    auto payTask = [&](services::LoanService* service) -> bool {
+        startFuture.wait();
+        try {
+            service->payFine(loanId, 700, "2026-03-21");
+            return true;
+        } catch (...) {
+            return false;
+        }
+    };
+
+    auto f1 = std::async(std::launch::async, payTask, service1_.get());
+    auto f2 = std::async(std::launch::async, payTask, service2_.get());
+
+    startSignal.set_value();
+
+    bool res1 = f1.get();
+    bool res2 = f2.get();
+
+    // Both cannot succeed because 700 + 700 = 1400 > 1000
+    EXPECT_FALSE(res1 && res2);
+
+    // Total paid recorded in DB must never exceed 1000
+    int totalPaid = loanRepo1_->getTotalPaidForLoan(loanId);
+    EXPECT_LE(totalPaid, 1000);
+
+    if (res1 || res2) {
+        EXPECT_EQ(totalPaid, 700);
+    }
 }
 
 } // namespace
