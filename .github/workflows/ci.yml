@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-and-test:
     name: Build & Test (${{ matrix.preset }})
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     strategy:
       fail-fast: false
