@@ -46,3 +46,4 @@ jobs:
 
       - name: Run Test Suite (CTest)
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
+

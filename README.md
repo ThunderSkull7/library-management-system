@@ -3,6 +3,7 @@
 A high-performance, robust, and professional Library Management System built with modern **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
 
 [![CI](https://github.com/ThunderSkull7/library-management-system/actions/workflows/ci.yml/badge.svg)](https://github.com/ThunderSkull7/library-management-system/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg?style=flat&logo=c%2B%2B)
 ![CMake](https://img.shields.io/badge/CMake-3.20+-064F8C.svg?style=flat&logo=cmake)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57.svg?style=flat&logo=sqlite)
@@ -417,6 +418,7 @@ LibraryManagementSystem/
 ├── vcpkg.json                  # Manifest dependencies (sqlite3, gtest)
 ├── .gitignore                  # Git ignore rules for build, runtime DB, and IDE artifacts
 ├── .clang-format               # Code formatting configuration
+├── LICENSE                     # MIT License
 ├── README.md                   # Project landing page
 │
 ├── docs/
@@ -520,3 +522,11 @@ LibraryManagementSystem/
 └── data/
     └── .gitkeep                # Application runtime database directory
 ```
+
+---
+
+## 14. License
+
+This project is licensed under the terms of the [MIT License](LICENSE).  
+Copyright (c) 2026 ThunderSkull7.
+
