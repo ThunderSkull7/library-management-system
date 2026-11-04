@@ -63,6 +63,16 @@ public:
     [[nodiscard]] std::vector<models::Loan> getAllLoans();
 
     /**
+     * @brief Retrieves all currently active (unreturned) loans across the library.
+     */
+    [[nodiscard]] std::vector<models::Loan> getActiveLoans();
+
+    /**
+     * @brief Retrieves loans issued within a specified date range [startDate, endDate].
+     */
+    [[nodiscard]] std::vector<models::Loan> getLoansIssuedBetween(const std::string& startDate, const std::string& endDate);
+
+    /**
      * @brief Retrieves active loans whose due date is strictly before currentDate.
      */
     [[nodiscard]] std::vector<models::Loan> getOverdueLoans(const std::string& currentDate);
@@ -93,6 +103,11 @@ public:
      * @brief Returns the total amount of paise paid so far for a loan.
      */
     [[nodiscard]] int getTotalPaidForLoan(int loanId);
+
+    /**
+     * @brief Returns the grand total of all payments recorded across all loans in the library.
+     */
+    [[nodiscard]] int getTotalPaymentsReceivedAllLoans();
 
     /**
      * @brief Retrieves all individual payment transactions recorded for a loan.

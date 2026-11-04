@@ -49,6 +49,12 @@ public:
     [[nodiscard]] std::vector<models::BookCopy> getCopiesByBook(int bookId);
 
     /**
+     * @brief Counts the number of available copies for a specific book.
+     * @throws NotFoundException if the referenced book does not exist.
+     */
+    [[nodiscard]] int getAvailableCopiesCountForBook(int bookId);
+
+    /**
      * @brief Searches for a physical copy by its exact accession number.
      * @throws ValidationException if accessionNumber is empty or whitespace.
      */

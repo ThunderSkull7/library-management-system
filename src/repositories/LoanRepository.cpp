@@ -233,6 +233,54 @@ std::vector<models::Loan> LoanRepository::getAllLoans() {
     return loans;
 }
 
+std::vector<models::Loan> LoanRepository::getActiveLoans() {
+    sqlite3* db = connection_.getRawHandle();
+    const std::string sql =
+        "SELECT id, copy_id, member_id, issued_on, due_on, returned_on, fine_minor_units, fine_paid "
+        "FROM loans WHERE returned_on IS NULL ORDER BY due_on ASC;";
+
+    auto stmt = database::prepareStatement(db, sql);
+    std::vector<models::Loan> loans;
+
+    while (true) {
+        int rc = sqlite3_step(stmt.get());
+        if (rc == SQLITE_ROW) {
+            loans.push_back(extractLoanFromStatement(stmt.get()));
+        } else if (rc == SQLITE_DONE) {
+            break;
+        } else {
+            std::string errMsg = sqlite3_errmsg(db);
+            throw database::DatabaseException("Error querying active loans: " + errMsg, rc);
+        }
+    }
+    return loans;
+}
+
+std::vector<models::Loan> LoanRepository::getLoansIssuedBetween(const std::string& startDate, const std::string& endDate) {
+    sqlite3* db = connection_.getRawHandle();
+    const std::string sql =
+        "SELECT id, copy_id, member_id, issued_on, due_on, returned_on, fine_minor_units, fine_paid "
+        "FROM loans WHERE issued_on >= ? AND issued_on <= ? ORDER BY issued_on ASC;";
+
+    auto stmt = database::prepareStatement(db, sql);
+    sqlite3_bind_text(stmt.get(), 1, startDate.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt.get(), 2, endDate.c_str(), -1, SQLITE_TRANSIENT);
+
+    std::vector<models::Loan> loans;
+    while (true) {
+        int rc = sqlite3_step(stmt.get());
+        if (rc == SQLITE_ROW) {
+            loans.push_back(extractLoanFromStatement(stmt.get()));
+        } else if (rc == SQLITE_DONE) {
+            break;
+        } else {
+            std::string errMsg = sqlite3_errmsg(db);
+            throw database::DatabaseException("Error querying loans issued between dates: " + errMsg, rc);
+        }
+    }
+    return loans;
+}
+
 std::vector<models::Loan> LoanRepository::getOverdueLoans(const std::string& currentDate) {
     sqlite3* db = connection_.getRawHandle();
     const std::string sql =
@@ -348,6 +396,21 @@ int LoanRepository::getTotalPaidForLoan(int loanId) {
 
     std::string errMsg = sqlite3_errmsg(db);
     throw database::DatabaseException("Error querying total paid for loan: " + errMsg, rc);
+}
+
+int LoanRepository::getTotalPaymentsReceivedAllLoans() {
+    sqlite3* db = connection_.getRawHandle();
+    const std::string sql =
+        "SELECT COALESCE(SUM(amount_minor_units), 0) FROM loan_payments;";
+
+    auto stmt = database::prepareStatement(db, sql);
+    int rc = sqlite3_step(stmt.get());
+    if (rc == SQLITE_ROW) {
+        return sqlite3_column_int(stmt.get(), 0);
+    }
+
+    std::string errMsg = sqlite3_errmsg(db);
+    throw database::DatabaseException("Error querying grand total payments: " + errMsg, rc);
 }
 
 std::vector<models::LoanPayment> LoanRepository::getPaymentsForLoan(int loanId) {

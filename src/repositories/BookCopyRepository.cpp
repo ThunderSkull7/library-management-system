@@ -146,6 +146,23 @@ std::vector<models::BookCopy> BookCopyRepository::getCopiesByBookId(int bookId) 
     return copies;
 }
 
+int BookCopyRepository::getAvailableCopiesCountForBook(int bookId) {
+    sqlite3* db = connection_.getRawHandle();
+    const std::string sql =
+        "SELECT COUNT(*) FROM book_copies WHERE book_id = ? AND status = 'Available';";
+
+    auto stmt = database::prepareStatement(db, sql);
+    sqlite3_bind_int(stmt.get(), 1, bookId);
+
+    int rc = sqlite3_step(stmt.get());
+    if (rc == SQLITE_ROW) {
+        return sqlite3_column_int(stmt.get(), 0);
+    }
+
+    std::string errMsg = sqlite3_errmsg(db);
+    throw database::DatabaseException("Error counting available copies for book: " + errMsg, rc);
+}
+
 std::vector<models::BookCopy> BookCopyRepository::getAllCopies() {
     sqlite3* db = connection_.getRawHandle();
     const std::string sql =

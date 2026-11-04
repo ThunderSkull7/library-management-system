@@ -29,6 +29,11 @@ public:
     static int daysBetween(const std::string& fromDateStr, const std::string& toDateStr);
 
     /**
+     * @brief Returns the current system date as an ISO date string (YYYY-MM-DD).
+     */
+    static std::string getTodayIsoDate();
+
+    /**
      * @brief Returns true if d1 is strictly chronologically before d2.
      */
     static bool isDateBefore(const std::string& d1, const std::string& d2);

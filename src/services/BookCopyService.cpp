@@ -125,6 +125,15 @@ std::vector<models::BookCopy> BookCopyService::getCopiesByBook(int bookId) {
     return copyRepository_.getCopiesByBookId(bookId);
 }
 
+int BookCopyService::getAvailableCopiesCountForBook(int bookId) {
+    auto book = bookRepository_.getBookById(bookId);
+    if (!book.has_value()) {
+        throw utils::NotFoundException(
+            "Referenced book with ID " + std::to_string(bookId) + " does not exist.");
+    }
+    return copyRepository_.getAvailableCopiesCountForBook(bookId);
+}
+
 std::optional<models::BookCopy> BookCopyService::searchByAccessionNumber(const std::string& accessionNumber) {
     std::string validAcc = validateAccessionNumber(accessionNumber);
     return copyRepository_.getCopyByAccessionNumber(validAcc);

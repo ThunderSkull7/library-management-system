@@ -17,6 +17,8 @@ add_executable(library_management_tests
     test_transaction.cpp
     test_loan_repository.cpp
     test_loan_service.cpp
+    test_report_service.cpp
+    test_cli_helpers.cpp
 )
 
 target_link_libraries(library_management_tests
@@ -40,4 +42,3 @@ endif()
 
 include(GoogleTest)
 gtest_discover_tests(library_management_tests)
-

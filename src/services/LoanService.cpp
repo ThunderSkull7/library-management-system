@@ -223,6 +223,23 @@ std::vector<models::Loan> LoanService::getAllLoans() {
     return loanRepository_.getAllLoans();
 }
 
+std::vector<models::Loan> LoanService::getActiveLoans() {
+    return loanRepository_.getActiveLoans();
+}
+
+std::vector<models::Loan> LoanService::getLoansIssuedBetween(const std::string& startDate, const std::string& endDate) {
+    if (!utils::DateUtils::isValidIsoDate(startDate)) {
+        throw utils::ValidationException("Start date must be a valid ISO date in YYYY-MM-DD format. Received: '" + startDate + "'");
+    }
+    if (!utils::DateUtils::isValidIsoDate(endDate)) {
+        throw utils::ValidationException("End date must be a valid ISO date in YYYY-MM-DD format. Received: '" + endDate + "'");
+    }
+    if (utils::DateUtils::isDateAfter(startDate, endDate)) {
+        throw utils::ValidationException("Start date ('" + startDate + "') cannot be after end date ('" + endDate + "').");
+    }
+    return loanRepository_.getLoansIssuedBetween(startDate, endDate);
+}
+
 std::vector<models::Loan> LoanService::getOverdueLoans(const std::string& currentDate) {
     if (!utils::DateUtils::isValidIsoDate(currentDate)) {
         throw utils::ValidationException("Current date must be a valid ISO date in YYYY-MM-DD format. Received: '" + currentDate + "'");
@@ -248,4 +265,3 @@ int LoanService::getRemainingFine(int loanId) {
 }
 
 } // namespace lms::services
-

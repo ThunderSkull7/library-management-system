@@ -48,6 +48,11 @@ public:
     [[nodiscard]] std::vector<models::BookCopy> getCopiesByBookId(int bookId);
 
     /**
+     * @brief Counts the number of copies for a book that are currently Available.
+     */
+    [[nodiscard]] int getAvailableCopiesCountForBook(int bookId);
+
+    /**
      * @brief Retrieves all physical copies in the library.
      */
     [[nodiscard]] std::vector<models::BookCopy> getAllCopies();

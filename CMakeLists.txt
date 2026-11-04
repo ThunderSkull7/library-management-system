@@ -60,8 +60,12 @@ add_library(library_management_lib STATIC
     src/repositories/MemberRepository.cpp
     src/services/BookService.cpp
     src/services/BookCopyService.cpp
+    src/services/LibraryReportService.cpp
     src/services/LoanService.cpp
     src/services/MemberService.cpp
+    src/cli/TableFormatter.cpp
+    src/cli/InputHandler.cpp
+    src/cli/ConsoleUI.cpp
     src/utils/DateUtils.cpp
     src/utils/ValidationUtils.cpp
 )
@@ -125,4 +129,3 @@ if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
 endif()
-

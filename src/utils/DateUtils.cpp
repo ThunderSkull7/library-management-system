@@ -81,6 +81,12 @@ int DateUtils::daysBetween(const std::string& fromDateStr, const std::string& to
     return static_cast<int>((sdTo - sdFrom).count());
 }
 
+std::string DateUtils::getTodayIsoDate() {
+    auto now = std::chrono::system_clock::now();
+    auto ymd = std::chrono::year_month_day{std::chrono::floor<std::chrono::days>(now)};
+    return formatYmd(ymd);
+}
+
 bool DateUtils::isDateBefore(const std::string& d1, const std::string& d2) {
     return daysBetween(d1, d2) > 0;
 }

@@ -58,6 +58,8 @@ public:
     [[nodiscard]] std::vector<models::Loan> getLoanHistoryForMember(int memberId);
     [[nodiscard]] std::vector<models::Loan> getLoanHistoryForCopy(int copyId);
     [[nodiscard]] std::vector<models::Loan> getAllLoans();
+    [[nodiscard]] std::vector<models::Loan> getActiveLoans();
+    [[nodiscard]] std::vector<models::Loan> getLoansIssuedBetween(const std::string& startDate, const std::string& endDate);
     [[nodiscard]] std::vector<models::Loan> getOverdueLoans(const std::string& currentDate);
     [[nodiscard]] std::vector<models::Loan> getOutstandingFines();
     [[nodiscard]] std::vector<models::LoanPayment> getPaymentsForLoan(int loanId);
