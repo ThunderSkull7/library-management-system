@@ -1,141 +1,39 @@
 # Library Management System
 
-A modern, high-performance Library Management System built with **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
+A high-performance, robust, and professional Library Management System built with modern **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
 
-> **Production Release**: Complete, audited, and hardened implementation encompassing the database architecture, physical copy management, patron account lifecycles, atomic circulation workflows, concurrency protections, catalog discovery, integer paise financial accounting, comprehensive administrative reporting, and an interactive command-line interface.
+[![CI](https://github.com/ThunderSkull7/library-management-system/actions/workflows/ci.yml/badge.svg)](https://github.com/ThunderSkull7/library-management-system/actions/workflows/ci.yml)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg?style=flat&logo=c%2B%2B)
+![CMake](https://img.shields.io/badge/CMake-3.20+-064F8C.svg?style=flat&logo=cmake)
+![SQLite](https://img.shields.io/badge/SQLite-3-003B57.svg?style=flat&logo=sqlite)
+![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D4.svg?style=flat&logo=windows)
+![Build](https://img.shields.io/badge/Compiler-MSVC%202022-purple.svg?style=flat&logo=visual-studio)
 
----
-
-## 1. Project Overview
-
-The Library Management System is architected as a modular, extensible C++ application designed for physical library operations:
-
-- **Phase 1: Foundation & Database Architecture**: RAII SQLite3 connection management, foreign-key enforcement, busy timeouts, transactional migrations via `user_version`, normalized tables (`books`, `book_copies`, `members`, `loans`), and partial unique indexes.
-- **Phase 2: Book Catalog & Physical Copy Management**:
-  - Independent domain models (`Book`, `BookCopy`, `BookCopyStatus`).
-  - Parameterized SQLite repositories (`BookRepository`, `BookCopyRepository`) with RAII prepared statement handling.
-  - Business services (`BookService`, `BookCopyService`) validating non-empty fields, publication year, ISO dates, duplicate checks, and status safety.
-- **Phase 3: Member Registration & Management**:
-  - Independent domain model (`Member`) and status enum (`MemberStatus`: `Active`, `Suspended`, `Closed`).
-  - Parameterized SQLite repository (`MemberRepository`) handling nullable emails and phones, unique constraint violations, and status updates.
-  - Business service (`MemberService`) validating full names, basic email syntax (`user@domain.tld`), ISO calendar join dates, status lifecycles, and loan history preservation.
-- **Phase 4 & 4.1: Circulation, Fines & Concurrency Safety**:
-  - Independent domain models: `Loan`, `LoanPayment`, and `LibraryPolicy`.
-  - Date calculations using C++20 `<chrono>` calendar (`DateUtils`).
-  - Schema migration to Version 2 introducing the `loan_payments` table and foreign key indexes.
-  - RAII Transaction manager (`Transaction`) guaranteeing atomic operations (`BEGIN IMMEDIATE`, `COMMIT`, `ROLLBACK`) with database reads encapsulated strictly inside transaction boundaries to eliminate race conditions.
-  - Business service (`LoanService`) enforcing borrowing limits, copy availability, member status verification, overdue fines in integer minor units (paise: ₹2 = 200 paise/day), grace periods, maximum fine caps, and partial/full fine payments.
-- **Phase 5: Search, Reporting & Complete CLI Integration**:
-  - Interactive CLI application (`ConsoleUI`) with formatted menus, breadcrumbs, resilient input validation (`InputHandler`), and aligned ASCII tabular displays (`TableFormatter`).
-  - Flexible catalog search: book title, author, ISBN, category, copy accession number, member name/email/ID, and active loans.
-  - Five comprehensive administrative, circulation, and financial reports (`LibraryReportService`):
-    1. **Inventory Report**: Catalog titles, copy availability, on-loan, lost, damaged, and withdrawn counts.
-    2. **Circulation Report**: Total, active, returned, and overdue loans with optional date-range filtering.
-    3. **Member Activity Report**: Member status breakdown, active borrowing statistics, and configurable top borrowers ranking.
-    4. **Fine Report**: Total fines assessed, payments received, and net outstanding balance in integer paise (formatted as `₹X.XX`).
-    5. **Overdue Report**: Detailed line items of active overdue loans as of any arbitrary date with days overdue and accrued fines capped at policy limits.
-- **Phase 6: Final Audit, Hardening & Verification**:
-  - Comprehensive static analysis and code audit ensuring zero resource leaks and strict exception safety.
-  - Verified full backwards compatibility of Schema V1 to V2 migration under foreign key constraints.
-  - Real end-to-end operational execution of Workflows A through F through the CLI executable.
-  - 214 automated GoogleTests passing with 100% success rate across Debug and Release configurations.
+The application provides an enterprise-ready circulation and catalog management engine designed for physical libraries. It enforces strict physical copy tracking, patron account status lifecycles, atomic circulation checkouts and returns, thread-safe database concurrency, exact integer paise fine accounting, flexible search queries, administrative reporting, and an interactive, resilient console interface.
 
 ---
 
-## 2. Technology Stack
+## 1. Key Features
 
-- **Language Standard**: C++20 (`/std:c++20`)
-- **Target OS**: Windows 11 (MSVC 2022 x64 toolchain)
-- **Build System**: CMake 3.20+ with CMake Presets
-- **Dependency Manager**: vcpkg in manifest mode (`vcpkg.json`)
-- **Database Engine**: SQLite 3
-- **Unit Testing**: GoogleTest (gtest) via CTest
-
----
-
-## 3. Prerequisites
-
-Before building the project, ensure the following are installed:
-
-- **Visual Studio 2022** (or Visual Studio Build Tools 2022) with the "Desktop development with C++" workload (MSVC v143 toolchain).
-- **CMake** (v3.20 or newer).
-- **vcpkg**: Microsoft C++ Library Manager. Ensure the environment variable `VCPKG_ROOT` points to your vcpkg installation (e.g., `C:\vcpkg`).
-- **Git** for version control.
+- **Book Catalog & Physical Copy Tracking**: Distinct domain separation between bibliographic titles (`Book`) and specific inventory items (`BookCopy`) with barcode/accession numbers and physical statuses (`Available`, `On Loan`, `Lost`, `Damaged`, `Withdrawn`).
+- **Patron Account Lifecycles**: Registered members with unique email addresses, contact details, join dates, and account states (`Active`, `Suspended`, `Closed`).
+- **Atomic Circulation Workflows**: Checkout and return operations execute within strict `BEGIN IMMEDIATE` transactions, updating loans and physical copy statuses atomically to eliminate race conditions.
+- **Accurate Financial Accounting (Zero Floating-Point Drift)**: Fines and fine payments are calculated and stored strictly in integer minor units (paise: ₹1 = 100 paise; ₹2.00/day default). Fines remain immutable once assessed, and split partial payments are reliably aggregated.
+- **Calendar & Overdue Calculations**: Powered by C++20 `<chrono>` calendar algorithms (`year_month_day`), safely computing loan durations, leap years, month boundaries, grace periods, and maximum fine caps.
+- **Comprehensive Administrative Reports**: Five instant analytical reports:
+  1. *Catalog Inventory Summary* (counts by title and physical status).
+  2. *Circulation Summary* (with optional ISO date-range filters).
+  3. *Member Activity Report* (status breakdown and ranked top borrowers).
+  4. *Financial & Fine Report* (total assessed, collected revenue, net outstanding balance).
+  5. *Overdue Loans Report* (active overdue loans with days overdue and accrued fines evaluated as of any date).
+- **Interactive & Resilient CLI**: Clean menu hierarchy, breadcrumbs, automatic whitespace trimming, stream recovery on malformed numeric input, and graceful exit on `EOF` (`Ctrl+Z`).
+- **Production-Grade SQLite Engine**: RAII connection lifecycle management, automated busy timeouts (5,000 ms), foreign key enforcement (`PRAGMA foreign_keys = ON;`), and migration tracking (`PRAGMA user_version`).
 
 ---
 
-## 4. vcpkg Setup
+## 2. Application Terminal Preview
 
-The project uses **vcpkg manifest mode** via `vcpkg.json`. When CMake configures the project, vcpkg automatically resolves, downloads, and compiles all declared dependencies (`sqlite3` and `gtest` for the test feature).
-
-Ensure `VCPKG_ROOT` is configured in your environment:
-```powershell
-$env:VCPKG_ROOT = "C:\vcpkg"
-```
-
----
-
-## 5. CMake Configuration Instructions
-
-Configure using the provided CMake presets:
-
-### Debug Configuration
-```powershell
-cmake --preset windows-msvc-debug
-```
-
-### Release Configuration
-```powershell
-cmake --preset windows-msvc-release
-```
-
----
-
-## 6. Build Instructions
-
-### Debug Build
-```powershell
-cmake --build --preset windows-msvc-debug
-```
-
-### Release Build
-```powershell
-cmake --build --preset windows-msvc-release
-```
-
----
-
-## 7. How to Run the Application
-
-Execute the compiled executable from the build directory. By default, it manages `data/library.db`. You may also provide an optional custom database path:
-
-### Default Database (`data/library.db`)
-```powershell
-.\build\release\Release\library_management_system.exe
-```
-
-### Custom / Test Database
-```powershell
-.\build\release\Release\library_management_system.exe path\to\custom_library.db
-```
-
----
-
-## 8. Default Circulation Policy
-
-The library operates under configurable business rules managed by `LibraryPolicy`:
-
-| Policy Parameter | Default Value | Description |
-|---|---|---|
-| **Loan Duration** | 14 days | Standard borrowing period for checked-out physical copies |
-| **Overdue Fine** | 200 paise / day (`₹2.00`) | Assessed per overdue calendar day past the due date |
-| **Max Active Loans** | 5 loans | Maximum number of concurrent active loans per member |
-| **Grace Period** | 0 days | Days past due date before fines begin accruing |
-| **Max Fine Cap** | Uncapped (`std::nullopt`) | Optional ceiling on accumulated overdue fines per loan |
-
----
-
-## 9. CLI Menu Hierarchy & Features
+*Illustrative terminal output from an actual session of the compiled CLI application:*
 
 ```text
 ========================================
@@ -149,108 +47,380 @@ The library operates under configurable business rules managed by `LibraryPolicy
 6. Reports
 7. Fine Payments
 0. Exit
+
+Select an option: 4
+
+========================================
+  ISSUE / RETURN BOOKS
+========================================
+1. Issue a Book Copy to Member
+2. Return a Book Copy
+0. Back to Main Menu
+
+Select an option: 1
+
+--- Issue Book Copy to Member ---
+Enter Member ID: 1
+Borrower: Katherine Johnson (Active)
+Enter Copy ID: 1
+Copy: #DDD-COPY-01 - "Domain-Driven Design"
+Issue Date [2026-11-04]: 2026-01-05
+
+[✓] Book successfully checked out!
+=======================================================
+ Loan ID      : 1
+ Member       : Katherine Johnson (ID #1)
+ Book         : "Domain-Driven Design"
+ Copy Barcode : DDD-COPY-01 (Copy #1)
+ Issued On    : 2026-01-05
+ Due Date     : 2026-01-19
+=======================================================
 ```
 
-### Submenu Capabilities:
-- **1. Book Management**: Add book title, update book details, delete book title, view book details by ID, list all books.
-- **2. Physical Copy Management**: Add physical copy to book, update copy status (`Available`, `Lost`, `Damaged`, `Withdrawn`), list all copies for a book, view copy details by accession number.
-- **3. Member Management**: Register new member, update profile, change status (`Active`, `Suspended`, `Closed`), delete member, view member details, list all members.
-- **4. Issue / Return Books**: Checkout book copy to member with loan limit enforcement, return book copy with automatic fine assessment.
-- **5. Search**: Search books (by title, author, ISBN, category, ID, or list all), search members (by name, email, ID, or list all), search loans (active loans, loans by member, loans by copy).
-- **6. Reports**:
-  - Inventory Summary Report
-  - Circulation Summary Report (with optional ISO start/end date range filter)
-  - Member Activity Report (with configurable top borrower limit)
-  - Fine & Revenue Report (assessed, collected, outstanding balance)
-  - Overdue Loans Report (with custom as-of date and fine calculation)
-- **7. Fine Payments**: View unpaid fines, view member fine history, record full or partial fine payment.
+*Financial settlement and ASCII tabular reporting preview:*
+
+```text
+========================================
+  FINANCIAL & FINE REPORT
+========================================
+ Total Fines Assessed     : ₹20.00
+ Total Payments Received  : ₹20.00
+ Outstanding Balance      : ₹0.00
+----------------------------------------
+ Unpaid Fine Records      : 0
+ Fully Paid Fine Records  : 1
+========================================
+
++------------+----------------+----------------+
+| Payment ID |    Amount Paid | Payment Date   |
++------------+----------------+----------------+
+|          1 |          ₹8.00 | 2026-01-30     |
+|          2 |         ₹12.00 | 2026-01-31     |
++------------+----------------+----------------+
+```
 
 ---
 
-## 10. Core Operational Workflows
+## 3. Technology Stack
 
-### Workflow A: Book Creation, Copies, Member Registration & Checkout
-1. Select `1. Book Management` -> `1. Add Book Title`. Enter title, author, ISBN, publisher, publication year, category.
-2. Select `2. Physical Copy Management` -> `1. Add Physical Copy`. Enter the Book ID and a unique accession number (e.g., `ACC-001`).
-3. Select `3. Member Management` -> `1. Register New Member`. Enter full name, join date (`YYYY-MM-DD`), email, and phone number.
-4. Select `4. Issue / Return Books` -> `1. Issue (Checkout) Book`. Enter the Member ID, Copy ID, and Issue Date.
-5. Verify the copy transitions to `OnLoan` and the active loan appears in `5. Search` -> `3. Search Loans`.
-
-### Workflow B: Rejection of Disallowed Checkouts
-1. Attempt to check out an already-loaned copy: Select `4. Issue / Return Books` -> `1. Issue Book` with the loaned Copy ID. The system safely rolls back and reports: `Copy is not available for checkout (current status: On Loan)`.
-2. Suspend a member: Select `3. Member Management` -> `3. Change Member Status` and set the status to `Suspended`.
-3. Attempt checkout for the suspended member: The system rejects the transaction with: `Cannot checkout book to inactive member (current status: Suspended)`.
-4. Verify physical copy and database state remain completely uncorrupted.
-
-### Workflow C: Overdue Return, Fine Assessment & Payment
-1. Select `4. Issue / Return Books` -> `2. Return Book`. Enter the Copy ID and a return date after the due date.
-2. The system calculates the overdue duration and assesses fines in integer paise (₹2.00 / 200 paise per day):
-   - Example: 10 days late = 2000 paise = `₹20.00`.
-   - The copy is safely returned to `Available` status.
-3. Select `7. Fine Payments` -> `3. Record Fine Payment`. Enter the Loan ID and payment date.
-4. Make a partial payment (e.g., `₹8.00` = 800 paise). The system records the payment in `loan_payments`, leaves `fine_paid = false`, and displays the remaining balance (`₹12.00`).
-5. Make the remaining payment (`₹12.00` = 1200 paise). The system marks `fine_paid = true`.
-
-### Workflow D: Reporting & Analytics
-1. Select `6. Reports` -> `1. Inventory Summary`: Displays total titles, total copies, available copies, on-loan copies, lost, damaged, and withdrawn copies.
-2. Select `6. Reports` -> `2. Circulation Summary`: Enter an as-of date (or accept today's date) and optional start/end dates. Displays total loans, active loans, returned loans, and overdue counts.
-3. Select `6. Reports` -> `3. Member Activity Report`: Enter top borrower limit. Displays member count by status, patrons with active loans, and ranked top borrowers.
-4. Select `6. Reports` -> `4. Overdue Loans Report`: Enter an evaluation date. Displays all active loans that have passed their due date with days overdue and accrued fine (capped at policy max).
-5. Select `6. Reports` -> `5. Fine & Revenue Report`: Displays total assessed fines, collected revenue, and outstanding receivables in `₹X.XX`.
+| Layer / Aspect | Technology / Tool | Version / Standard |
+|---|---|---|
+| **Language Standard** | Modern C++ | **C++20** (`/std:c++20` with `/permissive- /utf-8 /W4`) |
+| **Operating System** | Microsoft Windows | Windows 11 / Windows 10 (x64) |
+| **Compiler Toolchain** | Microsoft Visual C++ (MSVC) | Visual Studio 2022 (MSVC v143) |
+| **Build System** | CMake | Version 3.20+ with CMake Presets (V3) |
+| **Dependency Manager** | vcpkg | Manifest mode (`vcpkg.json`) |
+| **Database Engine** | SQLite3 | Version 3.45+ (via vcpkg) |
+| **Test Framework** | GoogleTest (gtest) | Version 1.14+ (via CTest) |
+| **Continuous Integration** | GitHub Actions | Windows Server 2022 Hosted Runner (`windows-latest`) |
 
 ---
 
-## 11. How to Run Tests
+## 4. Architecture Overview
 
-Run the full GoogleTest suite using CTest:
+The system is constructed with strict horizontal layering, decoupling user presentation, business logic, data persistence, and database connection infrastructure.
 
-### Run Debug Tests
-```powershell
-ctest --preset windows-msvc-debug
+```mermaid
+flowchart TD
+    subgraph Presentation_Layer["Presentation Layer (lms::cli)"]
+        UI["ConsoleUI (Interactive Menus)"]
+        IH["InputHandler (Resilient Stream Reader)"]
+        TF["TableFormatter (Aligned ASCII Tables)"]
+        CF["CurrencyFormatter (Integer Paise Arithmetic)"]
+        UI --> IH
+        UI --> TF
+        UI --> CF
+    end
+
+    subgraph Service_Layer["Service Layer (lms::services)"]
+        BS["BookService"]
+        CS["BookCopyService"]
+        MS["MemberService"]
+        LS["LoanService"]
+        RS["LibraryReportService"]
+    end
+
+    subgraph Repository_Layer["Repository Layer (lms::repositories)"]
+        BR["BookRepository"]
+        CR["BookCopyRepository"]
+        MR["MemberRepository"]
+        LR["LoanRepository"]
+    end
+
+    subgraph Infrastructure_Layer["Infrastructure Layer (lms::database)"]
+        TX["Transaction (RAII Guard)"]
+        DBC["DatabaseConnection (SQLite3)"]
+        SM["SchemaManager (V1 -> V2)"]
+    end
+
+    subgraph Domain_And_Utils["Domain Models & Utilities"]
+        DM["Models (Book, Copy, Member, Loan, Policy)"]
+        DU["DateUtils (C++20 chrono Calendar)"]
+        VU["ValidationUtils"]
+    end
+
+    UI --> BS
+    UI --> CS
+    UI --> MS
+    UI --> LS
+    UI --> RS
+
+    BS --> BR
+    CS --> CR
+    CS --> BR
+    MS --> MR
+    LS --> LR
+    LS --> CR
+    LS --> MR
+    LS --> TX
+    RS --> BR
+    RS --> CR
+    RS --> MR
+    RS --> LR
+
+    BR --> DBC
+    CR --> DBC
+    MR --> DBC
+    LR --> DBC
+    TX --> DBC
+    SM --> DBC
+
+    Service_Layer -.-> DM
+    Service_Layer -.-> DU
+    Service_Layer -.-> VU
 ```
 
-### Run Release Tests
-```powershell
-ctest --preset windows-msvc-release
+*For comprehensive architecture specifications, see [docs/architecture.md](docs/architecture.md).*
+
+---
+
+## 5. Database Design
+
+The database schema enforces data integrity through foreign keys with `ON DELETE RESTRICT`, column constraints, and a partial unique index ensuring that a physical copy cannot be loaned simultaneously to multiple patrons.
+
+```mermaid
+erDiagram
+    BOOKS ||--o{ BOOK_COPIES : "contains"
+    BOOK_COPIES ||--o{ LOANS : "loaned through"
+    MEMBERS ||--o{ LOANS : "borrows"
+    LOANS ||--o{ LOAN_PAYMENTS : "settled via"
+
+    BOOKS {
+        int id PK "INTEGER AUTOINCREMENT"
+        string isbn UK "TEXT UNIQUE, NULLABLE"
+        string title "TEXT NOT NULL"
+        string author "TEXT NOT NULL"
+        string publisher "TEXT NULLABLE"
+        int publication_year "INTEGER NULLABLE"
+        string category "TEXT NULLABLE"
+        string description "TEXT NULLABLE"
+    }
+
+    BOOK_COPIES {
+        int id PK "INTEGER AUTOINCREMENT"
+        int book_id FK "INTEGER NOT NULL (books.id)"
+        string accession_number UK "TEXT NOT NULL UNIQUE"
+        string status "TEXT NOT NULL (Available, On Loan, Lost, Damaged, Withdrawn)"
+        string acquired_on "TEXT NULLABLE (ISO-8601)"
+    }
+
+    MEMBERS {
+        int id PK "INTEGER AUTOINCREMENT"
+        string full_name "TEXT NOT NULL"
+        string email UK "TEXT UNIQUE, NULLABLE"
+        string phone "TEXT NULLABLE"
+        string joined_on "TEXT NOT NULL (ISO-8601)"
+        string status "TEXT NOT NULL (Active, Suspended, Closed)"
+    }
+
+    LOANS {
+        int id PK "INTEGER AUTOINCREMENT"
+        int copy_id FK "INTEGER NOT NULL (book_copies.id)"
+        int member_id FK "INTEGER NOT NULL (members.id)"
+        string issued_on "TEXT NOT NULL (ISO-8601)"
+        string due_on "TEXT NOT NULL (ISO-8601)"
+        string returned_on "TEXT NULLABLE (ISO-8601)"
+        int fine_minor_units "INTEGER NOT NULL DEFAULT 0 (paise)"
+        int fine_paid "INTEGER NOT NULL DEFAULT 0 (0 or 1)"
+    }
+
+    LOAN_PAYMENTS {
+        int id PK "INTEGER AUTOINCREMENT"
+        int loan_id FK "INTEGER NOT NULL (loans.id)"
+        int amount_minor_units "INTEGER NOT NULL (paise > 0)"
+        string paid_on "TEXT NOT NULL (ISO-8601)"
+    }
 ```
 
-Or execute the test binary directly:
+*For complete schema DDL, indexing strategies, and migration history, see [docs/database_architecture.md](docs/database_architecture.md).*
+
+---
+
+## 6. Build and Installation Instructions
+
+### Prerequisites
+- **Visual Studio 2022** (v17.0+) with the "Desktop development with C++" workload (MSVC toolchain v143).
+- **CMake** (v3.20 or newer).
+- **vcpkg** package manager. Set the environment variable `VCPKG_ROOT` (e.g. `C:\vcpkg`).
+- **Git** for version control.
+
+### Step 1: Clone Repository
+```powershell
+git clone https://github.com/ThunderSkull7/library-management-system.git
+cd library-management-system
+```
+
+### Step 2: Configure Environment
+Ensure `VCPKG_ROOT` is configured in your shell:
+```powershell
+$env:VCPKG_ROOT = "C:\vcpkg"
+```
+
+### Step 3: Configure via CMake Presets
+vcpkg manifest mode will automatically download, compile, and link SQLite3 and GoogleTest:
+
+```powershell
+# Debug Configuration
+cmake --preset windows-msvc-debug
+
+# Release Configuration
+cmake --preset windows-msvc-release
+```
+
+### Step 4: Build Executables & Test Suites
+```powershell
+# Compile Debug Targets
+cmake --build --preset windows-msvc-debug
+
+# Compile Release Targets
+cmake --build --preset windows-msvc-release
+```
+
+---
+
+## 7. Running the Application
+
+Execute the compiled application binary from your terminal:
+
+```powershell
+# Run Release Executable (manages data/library.db by default)
+.\build\release\Release\library_management_system.exe
+```
+
+### Custom Database Path
+The executable optionally accepts a custom database file path:
+```powershell
+.\build\release\Release\library_management_system.exe path\to\my_branch_library.db
+```
+
+Upon startup, the database directory is verified, foreign keys and busy timeouts are configured, and migrations are applied automatically.
+
+---
+
+## 8. Running Automated Tests
+
+Run the complete test suite across all 214 GoogleTests using CTest:
+
+```powershell
+# Run Debug Tests with Failure Reporting
+ctest --preset windows-msvc-debug --output-on-failure
+
+# Run Release Tests with Failure Reporting
+ctest --preset windows-msvc-release --output-on-failure
+```
+
+You can also run the test executable directly:
 ```powershell
 .\build\release\tests\Release\library_management_tests.exe
 ```
 
----
-
-## 12. Known Limitations
-
-- **Single-Machine Embedded Database**: Built on SQLite3 with file locking. It is optimized for single-machine library branch deployments or desktop use, not high-concurrency client-server web architectures.
-- **Calendar Boundaries**: All dates must be formatted strictly in ISO-8601 (`YYYY-MM-DD`).
-- **Terminal Display**: Tabular reports are optimized for terminals of at least 80–120 characters in width.
+*For exact test case matrices and workflow logs, see [docs/testing_and_verification.md](docs/testing_and_verification.md).*
 
 ---
 
-## 13. Documentation Sitemap
+## 9. Example Workflows
 
-- [System Architecture](docs/architecture.md): Layered design, transaction isolation, RAII, and exception safety.
-- [Database Architecture](docs/database_architecture.md): Full schema (V2), Mermaid ER diagram, constraint definitions, and indexes.
-- [Testing & Verification Evidence](docs/testing_and_verification.md): Automated test matrix and manual CLI workflow execution logs.
+### Workflow A: Book Creation, Copies & Member Checkout
+1. Select `1. Book Management` -> `1. Add a Book`. Enter title, author, optional ISBN, publisher, and category.
+2. Select `2. Physical Copy Management` -> `1. Add a Physical Copy`. Enter Book ID, accession barcode (e.g. `ACC-001`), and initial status (`Available`).
+3. Select `3. Member Management` -> `1. Register a Member`. Enter patron full name, email, phone number, and join date.
+4. Select `4. Issue / Return Books` -> `1. Issue a Book Copy to Member`. Enter Member ID, Copy ID, and Issue Date.
+5. The system calculates the due date (14 days), marks the copy `On Loan`, and records the active loan.
+
+### Workflow B: Safeguards & Rejection of Disallowed Checkouts
+1. Attempt to check out an already-loaned copy: The system aborts with `Copy is not available for checkout (current status: On Loan)`.
+2. Suspend a patron account (`3. Member Management` -> `5. Suspend / Reactivate / Close Member`).
+3. Attempt checkout for the suspended patron: The system rejects the transaction with `Cannot checkout book to inactive member (current status: Suspended)`.
+4. The database remains completely consistent without partial records.
+
+### Workflow C: Overdue Return & Fine Assessment
+1. Select `4. Issue / Return Books` -> `2. Return a Book Copy`.
+2. Enter the Copy ID and a return date beyond the scheduled due date.
+3. The system calculates overdue calendar days and assesses the fine in integer paise (₹2.00 / 200 paise per day):
+   - *Example: 10 days overdue = 2000 paise = ₹20.00.*
+4. The copy is safely marked `Available` for borrowing.
+
+### Workflow D: Fine Settlement & Split Payments
+1. Select `7. Fine Payments` -> `3. Record a Fine Payment`. Enter Loan ID.
+2. The system displays assessed fine, prior payments, and outstanding balance.
+3. Record a partial payment (e.g. 800 paise = ₹8.00). The balance decrements to ₹12.00, remaining `Partially Paid`.
+4. Record the final payment (1200 paise = ₹12.00). The system marks the loan `FULLY SETTLED [✓]`.
 
 ---
 
-## 14. Project Directory Structure
+## 10. Default Circulation Policy
+
+Circulation policies are managed by the configurable domain model `LibraryPolicy`:
+
+| Policy Parameter | Default Value | Description |
+|---|---|---|
+| **Standard Loan Duration** | 14 calendar days | Lending period for checked-out physical copies |
+| **Overdue Fine Rate** | 200 paise / day (`₹2.00`) | Accrued per overdue day past the scheduled due date |
+| **Borrowing Limit** | 5 active loans | Maximum concurrent active checkouts per patron |
+| **Grace Period** | 0 calendar days | Buffer period past due date before fines begin accruing |
+| **Maximum Fine Cap** | Uncapped (`std::nullopt`) | Configurable maximum ceiling on accumulated fine per loan |
+
+---
+
+## 11. Project Documentation Links
+
+Deep architectural specifications, database designs, and verification logs are available in the `docs/` directory:
+
+- [System Architecture](docs/architecture.md): Layered design, transaction boundaries, concurrency protections, and error handling.
+- [Database Architecture](docs/database_architecture.md): Full schema specifications (V2), index optimizations, constraints, and migration history.
+- [Testing & Verification Evidence](docs/testing_and_verification.md): Automated test matrix (214 tests) and end-to-end CLI workflow execution logs.
+
+---
+
+## 12. Future Improvements (Planned)
+
+The following capabilities represent reasonable future extensions beyond the core single-machine CLI architecture:
+
+- **Automated Patron Notifications**: Scheduled background sidecar generating reminder emails for approaching due dates.
+- **Hardware Barcode Integration**: Direct USB/serial barcode scanner HID listener for rapid checkouts and returns.
+- **Inter-Branch Inventory Transfers**: Multi-branch support tracking transit states between regional library branches.
+- **Role-Based Staff Access**: Cryptographic authentication separating permissions for Librarians, Catalogers, and Auditors.
+
+---
+
+## 13. Project Directory Structure
 
 ```text
 LibraryManagementSystem/
 │
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # GitHub Actions CI workflow (MSVC Debug & Release)
+│
 ├── CMakeLists.txt              # Root build configuration
 ├── CMakePresets.json           # Presets for Windows MSVC Debug & Release
-├── vcpkg.json                  # Dependency manifest (sqlite3, gtest)
-├── .gitignore                  # Git ignore rules for build and runtime data
+├── vcpkg.json                  # Manifest dependencies (sqlite3, gtest)
+├── .gitignore                  # Git ignore rules for build, runtime DB, and IDE artifacts
 ├── .clang-format               # Code formatting configuration
-├── README.md                   # Project documentation
+├── README.md                   # Project landing page
 │
 ├── docs/
-│   ├── architecture.md         # Detailed architectural documentation
+│   ├── architecture.md         # Detailed system architectural documentation
 │   ├── database_architecture.md # Database schema, ER diagram & index design
 │   └── testing_and_verification.md # Test evidence and CLI workflow execution logs
 │
@@ -328,24 +498,24 @@ LibraryManagementSystem/
 │
 ├── tests/
 │   ├── CMakeLists.txt          # Test build configuration
-│   ├── test_database_connection.cpp
-│   ├── test_schema_manager.cpp
+│   ├── test_book_copy_repository.cpp
+│   ├── test_book_copy_service.cpp
 │   ├── test_book_model.cpp
 │   ├── test_book_repository.cpp
 │   ├── test_book_service.cpp
-│   ├── test_book_copy_repository.cpp
-│   ├── test_book_copy_service.cpp
+│   ├── test_cli_helpers.cpp    # CLI InputHandler, TableFormatter, CurrencyFormatter
+│   ├── test_database_connection.cpp
+│   ├── test_date_utils.cpp
+│   ├── test_library_policy.cpp
+│   ├── test_loan_model.cpp
+│   ├── test_loan_repository.cpp
+│   ├── test_loan_service.cpp
 │   ├── test_member_model.cpp
 │   ├── test_member_repository.cpp
 │   ├── test_member_service.cpp
-│   ├── test_loan_model.cpp
-│   ├── test_library_policy.cpp
-│   ├── test_date_utils.cpp
-│   ├── test_transaction.cpp
-│   ├── test_loan_repository.cpp
-│   ├── test_loan_service.cpp
 │   ├── test_report_service.cpp # Reports & end-to-end workflow verification
-│   └── test_cli_helpers.cpp    # CLI InputHandler, TableFormatter, CurrencyFormatter
+│   ├── test_schema_manager.cpp
+│   └── test_transaction.cpp
 │
 └── data/
     └── .gitkeep                # Application runtime database directory

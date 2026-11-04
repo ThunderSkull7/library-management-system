@@ -98,3 +98,4 @@ The compiled binary (`build/debug/Debug/library_management_system.exe`) was exec
   - Verified member table displays Member ID 1 (*Katherine Johnson*).
   - Verified payment history displays Payment ID 1 (`₹8.00` on `2026-01-30`) and Payment ID 2 (`₹12.00` on `2026-01-31`).
   - Verified financial report retains zero outstanding balance and 1 fully paid record.
+

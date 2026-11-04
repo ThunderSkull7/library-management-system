@@ -129,3 +129,4 @@ graph TD
 - **`ValidationException`**: Thrown on malformed inputs (invalid dates, duplicate ISBNs, blank names, loan limit violations).
 - **`NotFoundException`**: Thrown when querying an entity ID that does not exist in the database.
 - **`EofException`**: Raised by interactive CLI handlers when the input stream is closed unexpectedly.
+
