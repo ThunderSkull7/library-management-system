@@ -16,14 +16,22 @@
 #include <filesystem>
 #include <iostream>
 
-int main() {
+int main(int argc, char* argv[]) {
     try {
-        const std::filesystem::path dataDir = "data";
-        if (!std::filesystem::exists(dataDir)) {
-            std::filesystem::create_directories(dataDir);
+        std::filesystem::path dbPath;
+        if (argc > 1 && argv[1] != nullptr && argv[1][0] != '\0') {
+            dbPath = argv[1];
+        } else {
+            const std::filesystem::path dataDir = "data";
+            if (!std::filesystem::exists(dataDir)) {
+                std::filesystem::create_directories(dataDir);
+            }
+            dbPath = dataDir / "library.db";
         }
 
-        const std::filesystem::path dbPath = dataDir / "library.db";
+        if (dbPath.has_parent_path() && !std::filesystem::exists(dbPath.parent_path())) {
+            std::filesystem::create_directories(dbPath.parent_path());
+        }
 
         lms::database::DatabaseConnection connection(dbPath);
         lms::database::SchemaManager schemaManager(connection);

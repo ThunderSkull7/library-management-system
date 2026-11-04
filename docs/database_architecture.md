@@ -5,37 +5,70 @@
 The Library Management System foundation employs an embedded **SQLite3** database accessed through an idiomatic, modern C++20 resource-management architecture.
 
 The database layer is divided into two primary components:
-1. **`DatabaseConnection`**: Responsible for database connection lifecycle management (RAII), runtime configuration, busy timeout handling, and foreign-key constraint enforcement.
+1. **`DatabaseConnection`**: Responsible for database connection lifecycle management (RAII), runtime configuration, busy timeout handling (5,000 ms), and foreign-key constraint enforcement (`PRAGMA foreign_keys = ON;`).
 2. **`SchemaManager`**: Responsible for transactional DDL execution, schema migration tracking via SQLite's `PRAGMA user_version`, idempotent table and index creation, and rejecting unsupported future versions.
 
 ---
 
-## 2. Component Design
+## 2. Entity-Relationship Diagram
 
-### 2.1 DatabaseConnection
+```mermaid
+erDiagram
+    BOOKS ||--o{ BOOK_COPIES : "contains"
+    BOOK_COPIES ||--o{ LOANS : "loaned through"
+    MEMBERS ||--o{ LOANS : "borrows"
+    LOANS ||--o{ LOAN_PAYMENTS : "settled via"
 
-`DatabaseConnection` acts as an RAII wrapper around the native SQLite3 handle (`sqlite3*`).
+    BOOKS {
+        int id PK "INTEGER AUTOINCREMENT"
+        string isbn UK "TEXT UNIQUE, NULLABLE"
+        string title "TEXT NOT NULL"
+        string author "TEXT NOT NULL"
+        string publisher "TEXT NULLABLE"
+        int publication_year "INTEGER NULLABLE"
+        string category "TEXT NULLABLE"
+        string description "TEXT NULLABLE"
+    }
 
-- **Lifecycle & RAII**: Opening a database allocates the underlying SQLite handle and validates its state. The connection is cleanly closed in the destructor or when explicitly invoking `close()`.
-- **Copy & Move Semantics**: Copy operations are deleted to prevent duplicate ownership of SQLite connection pointers. Move operations (move constructor and move assignment) are fully supported with `std::exchange`.
-- **Foreign Key Enforcement**: SQLite does not enable foreign keys by default. `DatabaseConnection` executes `PRAGMA foreign_keys = ON;` on every connection opened and immediately verifies that `PRAGMA foreign_keys;` returns `1`. If foreign keys cannot be verified, an exception is thrown and the connection is closed.
-- **Busy Timeout**: Configured to 5,000 milliseconds to handle concurrent contention scenarios gracefully.
-- **Error Propagation**: Low-level SQLite return codes and error strings are wrapped and surfaced as `DatabaseException` (derived from `std::runtime_error`), preserving both the error code and error message.
+    BOOK_COPIES {
+        int id PK "INTEGER AUTOINCREMENT"
+        int book_id FK "INTEGER NOT NULL (books.id)"
+        string accession_number UK "TEXT NOT NULL UNIQUE"
+        string status "TEXT NOT NULL (Available, On Loan, Lost, Damaged, Withdrawn)"
+        string acquired_on "TEXT NULLABLE (ISO-8601)"
+    }
 
-### 2.2 SchemaManager
+    MEMBERS {
+        int id PK "INTEGER AUTOINCREMENT"
+        string full_name "TEXT NOT NULL"
+        string email UK "TEXT UNIQUE, NULLABLE"
+        string phone "TEXT NULLABLE"
+        string joined_on "TEXT NOT NULL (ISO-8601)"
+        string status "TEXT NOT NULL (Active, Suspended, Closed)"
+    }
 
-`SchemaManager` ensures that the database schema is brought up to date safely and idempotently.
+    LOANS {
+        int id PK "INTEGER AUTOINCREMENT"
+        int copy_id FK "INTEGER NOT NULL (book_copies.id)"
+        int member_id FK "INTEGER NOT NULL (members.id)"
+        string issued_on "TEXT NOT NULL (ISO-8601)"
+        string due_on "TEXT NOT NULL (ISO-8601)"
+        string returned_on "TEXT NULLABLE (ISO-8601)"
+        int fine_minor_units "INTEGER NOT NULL DEFAULT 0 (paise)"
+        int fine_paid "INTEGER NOT NULL DEFAULT 0 (0 or 1)"
+    }
 
-- **Transaction Isolation**: Schema creation and migrations execute within an explicit `BEGIN IMMEDIATE;` ... `COMMIT;` transaction block, with automatic `ROLLBACK;` upon any failure.
-- **Schema Versioning**: SQLite's `PRAGMA user_version` tracks the current schema version.
-  - Initial baseline version: `1`.
-  - Up-to-date checks: If the database is already at version 1, initialization verifies tables/indexes idempotently.
-  - Future version safety: If `user_version > CURRENT_SCHEMA_VERSION`, `SchemaManager` throws a descriptive `DatabaseException` refusing to operate on incompatible newer schemas.
-- **Idempotency**: DDL statements utilize `IF NOT EXISTS` constructs so that repeated executions preserve existing data without corruption or duplication.
+    LOAN_PAYMENTS {
+        int id PK "INTEGER AUTOINCREMENT"
+        int loan_id FK "INTEGER NOT NULL (loans.id)"
+        int amount_minor_units "INTEGER NOT NULL (paise > 0)"
+        string paid_on "TEXT NOT NULL (ISO-8601)"
+    }
+```
 
 ---
 
-## 3. Database Schema Specification
+## 3. Database Schema Specification (Version 2)
 
 ### 3.1 Tables
 
@@ -91,8 +124,18 @@ Represents circulation checkout events and return history.
 | `issued_on` | TEXT | NOT NULL | Date loaned (ISO-8601) |
 | `due_on` | TEXT | NOT NULL, CHECK(`due_on >= issued_on`) | Scheduled due date |
 | `returned_on` | TEXT | NULLABLE, CHECK(`returned_on >= issued_on`) | Return date |
-| `fine_minor_units`| INTEGER| NOT NULL DEFAULT 0, CHECK(`>= 0`) | Overdue fine in cents/pennies |
-| `fine_paid` | INTEGER | NOT NULL DEFAULT 0, CHECK(`IN (0, 1)`) | Fine payment boolean flag |
+| `fine_minor_units`| INTEGER| NOT NULL DEFAULT 0, CHECK(`>= 0`) | Overdue fine in integer paise |
+| `fine_paid` | INTEGER | NOT NULL DEFAULT 0, CHECK(`IN (0, 1)`) | Fine payment settlement boolean flag |
+
+#### E. `loan_payments` (Introduced in Schema V2)
+Tracks individual partial or full payments made toward assessed overdue fines.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique payment transaction identifier |
+| `loan_id` | INTEGER | NOT NULL, FK -> `loans(id)` | Associated loan |
+| `amount_minor_units`| INTEGER| NOT NULL, CHECK(`> 0`) | Payment amount in integer paise |
+| `paid_on` | TEXT | NOT NULL | Transaction date (ISO-8601) |
 
 ---
 
@@ -126,4 +169,18 @@ Indexes are strategically placed without redundant duplication:
   - `idx_loans_copy_id ON loans(copy_id)`
   - `idx_loans_due_on ON loans(due_on)`
   - `idx_loans_active_due ON loans(due_on) WHERE returned_on IS NULL` (for fast overdue and active loan searches)
+- **`loan_payments`**:
+  - `idx_loan_payments_loan_id ON loan_payments(loan_id)` (for efficient aggregation of payments per loan)
 
+---
+
+## 5. Schema Migration History
+
+- **Version 1 (Initial Baseline)**:
+  - Created `books`, `book_copies`, `members`, and `loans` tables.
+  - Implemented foreign keys with `ON DELETE RESTRICT` to prevent orphan cascades.
+  - Enforced `one_active_loan_per_copy` partial index.
+- **Version 2 (Circulation Payment Accounting)**:
+  - Added `loan_payments` table for recording partial fine payments in integer paise.
+  - Added `idx_loan_payments_loan_id` index.
+  - Retained strict backwards compatibility, ensuring V1 records survive migrations completely intact.

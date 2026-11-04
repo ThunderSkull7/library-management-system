@@ -405,5 +405,75 @@ TEST_F(SchemaManagerTest, MigrationFromV1ToV2PreservesData) {
     sqlite3_finalize(stmt);
 }
 
+TEST_F(SchemaManagerTest, FullV1DatabaseMigratesToV2WithCompleteHistoryAndFKEnforcement) {
+    // 1. Create complete V1 schema with books, copies, members, and loans
+    connection_->execute("PRAGMA user_version = 1;");
+    connection_->execute(R"sql(
+        CREATE TABLE books (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            isbn TEXT UNIQUE,
+            title TEXT NOT NULL,
+            author TEXT NOT NULL,
+            publisher TEXT,
+            publication_year INTEGER,
+            category TEXT,
+            description TEXT
+        );
+        CREATE TABLE book_copies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            book_id INTEGER NOT NULL,
+            accession_number TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL CHECK(status IN ('Available', 'On Loan', 'Lost', 'Damaged', 'Withdrawn')),
+            acquired_on TEXT,
+            FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE RESTRICT
+        );
+        CREATE TABLE members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            email TEXT UNIQUE,
+            phone TEXT,
+            joined_on TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('Active', 'Suspended', 'Closed'))
+        );
+        CREATE TABLE loans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            copy_id INTEGER NOT NULL,
+            member_id INTEGER NOT NULL,
+            issued_on TEXT NOT NULL,
+            due_on TEXT NOT NULL,
+            returned_on TEXT,
+            fine_minor_units INTEGER NOT NULL DEFAULT 0 CHECK(fine_minor_units >= 0),
+            fine_paid INTEGER NOT NULL DEFAULT 0 CHECK(fine_paid IN (0, 1)),
+            FOREIGN KEY (copy_id) REFERENCES book_copies(id) ON DELETE RESTRICT,
+            FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE RESTRICT,
+            CHECK(due_on >= issued_on),
+            CHECK(returned_on IS NULL OR returned_on >= issued_on)
+        );
+    )sql");
+
+    // Seed V1 data
+    connection_->execute("INSERT INTO books (id, title, author) VALUES (1, 'Design Patterns', 'GoF');");
+    connection_->execute("INSERT INTO book_copies (id, book_id, accession_number, status) VALUES (1, 1, 'ACC-DP-01', 'Available');");
+    connection_->execute("INSERT INTO members (id, full_name, joined_on, status) VALUES (1, 'Ada Lovelace', '2026-01-01', 'Active');");
+    connection_->execute("INSERT INTO loans (id, copy_id, member_id, issued_on, due_on, returned_on, fine_minor_units, fine_paid) "
+                         "VALUES (1, 1, 1, '2026-01-01', '2026-01-15', '2026-01-20', 1000, 0);");
+
+    EXPECT_EQ(schemaManager_->getSchemaVersion(), 1);
+
+    // 2. Perform Migration to V2
+    schemaManager_->initializeSchema();
+    EXPECT_EQ(schemaManager_->getSchemaVersion(), 2);
+    EXPECT_TRUE(tableExists("loan_payments"));
+
+    // 3. Insert payment against existing loan 1
+    EXPECT_NO_THROW(connection_->execute(
+        "INSERT INTO loan_payments (loan_id, amount_minor_units, paid_on) VALUES (1, 500, '2026-01-22');"));
+
+    // 4. FK enforcement: invalid loan_id rejected
+    EXPECT_THROW(connection_->execute(
+        "INSERT INTO loan_payments (loan_id, amount_minor_units, paid_on) VALUES (999, 500, '2026-01-22');"),
+        lms::database::DatabaseException);
+}
+
 } // namespace
 

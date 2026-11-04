@@ -2,7 +2,7 @@
 
 A modern, high-performance Library Management System built with **C++20**, **SQLite3**, **CMake**, and **GoogleTest**.
 
-> **Note**: This repository represents **Phase 5: Search, Reporting & Complete CLI Integration** (built upon the Phase 1 Foundation, Phase 2 Book Catalog, Phase 3 Member Management, Phase 4 Circulation, and Phase 4.1 Concurrency Corrections). It provides an interactive menu-driven CLI, resilient input processing, tabular data formatting, comprehensive administrative and financial reporting in integer paise, catalog search, and full circulation workflow support.
+> **Production Release**: Complete, audited, and hardened implementation encompassing the database architecture, physical copy management, patron account lifecycles, atomic circulation workflows, concurrency protections, catalog discovery, integer paise financial accounting, comprehensive administrative reporting, and an interactive command-line interface.
 
 ---
 
@@ -34,7 +34,11 @@ The Library Management System is architected as a modular, extensible C++ applic
     3. **Member Activity Report**: Member status breakdown, active borrowing statistics, and configurable top borrowers ranking.
     4. **Fine Report**: Total fines assessed, payments received, and net outstanding balance in integer paise (formatted as `₹X.XX`).
     5. **Overdue Report**: Detailed line items of active overdue loans as of any arbitrary date with days overdue and accrued fines capped at policy limits.
-  - 213 automated GoogleTests covering all layers: models, policies, repositories, services, transactions, concurrency, CLI helpers, and end-to-end workflows.
+- **Phase 6: Final Audit, Hardening & Verification**:
+  - Comprehensive static analysis and code audit ensuring zero resource leaks and strict exception safety.
+  - Verified full backwards compatibility of Schema V1 to V2 migration under foreign key constraints.
+  - Real end-to-end operational execution of Workflows A through F through the CLI executable.
+  - 214 automated GoogleTests passing with 100% success rate across Debug and Release configurations.
 
 ---
 
@@ -103,23 +107,35 @@ cmake --build --preset windows-msvc-release
 
 ## 7. How to Run the Application
 
-Execute the compiled executable from the build directory:
+Execute the compiled executable from the build directory. By default, it manages `data/library.db`. You may also provide an optional custom database path:
 
-### Debug Mode
-```powershell
-.\build\debug\Debug\library_management_system.exe
-```
-
-### Release Mode
+### Default Database (`data/library.db`)
 ```powershell
 .\build\release\Release\library_management_system.exe
 ```
 
+### Custom / Test Database
+```powershell
+.\build\release\Release\library_management_system.exe path\to\custom_library.db
+```
+
 ---
 
-## 8. CLI Menu Hierarchy & Features
+## 8. Default Circulation Policy
 
-When launched, the application displays the Main Menu:
+The library operates under configurable business rules managed by `LibraryPolicy`:
+
+| Policy Parameter | Default Value | Description |
+|---|---|---|
+| **Loan Duration** | 14 days | Standard borrowing period for checked-out physical copies |
+| **Overdue Fine** | 200 paise / day (`₹2.00`) | Assessed per overdue calendar day past the due date |
+| **Max Active Loans** | 5 loans | Maximum number of concurrent active loans per member |
+| **Grace Period** | 0 days | Days past due date before fines begin accruing |
+| **Max Fine Cap** | Uncapped (`std::nullopt`) | Optional ceiling on accumulated overdue fines per loan |
+
+---
+
+## 9. CLI Menu Hierarchy & Features
 
 ```text
 ========================================
@@ -151,7 +167,7 @@ When launched, the application displays the Main Menu:
 
 ---
 
-## 9. Core Operational Workflows
+## 10. Core Operational Workflows
 
 ### Workflow A: Book Creation, Copies, Member Registration & Checkout
 1. Select `1. Book Management` -> `1. Add Book Title`. Enter title, author, ISBN, publisher, publication year, category.
@@ -169,11 +185,11 @@ When launched, the application displays the Main Menu:
 ### Workflow C: Overdue Return, Fine Assessment & Payment
 1. Select `4. Issue / Return Books` -> `2. Return Book`. Enter the Copy ID and a return date after the due date.
 2. The system calculates the overdue duration and assesses fines in integer paise (₹2.00 / 200 paise per day):
-   - Example: 5 days late = 1000 paise = `₹10.00`.
+   - Example: 10 days late = 2000 paise = `₹20.00`.
    - The copy is safely returned to `Available` status.
 3. Select `7. Fine Payments` -> `3. Record Fine Payment`. Enter the Loan ID and payment date.
-4. Make a partial payment (e.g., `₹4.00` = 400 paise). The system records the payment in `loan_payments`, leaves `fine_paid = false`, and displays the remaining balance (`₹6.00`).
-5. Make the remaining payment (`₹6.00` = 600 paise). The system marks `fine_paid = true`.
+4. Make a partial payment (e.g., `₹8.00` = 800 paise). The system records the payment in `loan_payments`, leaves `fine_paid = false`, and displays the remaining balance (`₹12.00`).
+5. Make the remaining payment (`₹12.00` = 1200 paise). The system marks `fine_paid = true`.
 
 ### Workflow D: Reporting & Analytics
 1. Select `6. Reports` -> `1. Inventory Summary`: Displays total titles, total copies, available copies, on-loan copies, lost, damaged, and withdrawn copies.
@@ -184,7 +200,7 @@ When launched, the application displays the Main Menu:
 
 ---
 
-## 10. How to Run Tests
+## 11. How to Run Tests
 
 Run the full GoogleTest suite using CTest:
 
@@ -200,30 +216,28 @@ ctest --preset windows-msvc-release
 
 Or execute the test binary directly:
 ```powershell
-.\build\debug\tests\Debug\library_management_tests.exe
+.\build\release\tests\Release\library_management_tests.exe
 ```
 
 ---
 
-## 11. Database Schema Overview (Schema Version 2)
+## 12. Known Limitations
 
-The database schema manages five core tables:
-
-1. **`books`**: Stores catalog metadata (id, title, author, publisher, publication_year, category, description, and unique nullable ISBN).
-2. **`book_copies`**: Tracks individual physical copies (id, book_id FK, accession_number UNIQUE, status CHECK, acquired_on).
-   - Valid statuses: `Available`, `On Loan`, `Lost`, `Damaged`, `Withdrawn`.
-3. **`members`**: Tracks registered patrons (id, full_name, email UNIQUE, phone, joined_on, status CHECK).
-   - Valid statuses: `Active`, `Suspended`, `Closed`.
-4. **`loans`**: Tracks checkouts and returns (id, copy_id FK, member_id FK, issued_on, due_on, returned_on, fine_minor_units CHECK, fine_paid CHECK).
-   - Partial unique index: `one_active_loan_per_copy` (`loans(copy_id) WHERE returned_on IS NULL`) guarantees that a physical copy cannot be checked out multiple times simultaneously.
-5. **`loan_payments`** (introduced in Schema V2): Tracks partial and full fine payments made against returned loans (id, loan_id FK, amount_minor_units CHECK, paid_on).
-   - Index: `idx_loan_payments_loan_id` for efficient payment aggregation.
-
-Detailed documentation is available in [docs/database_architecture.md](docs/database_architecture.md).
+- **Single-Machine Embedded Database**: Built on SQLite3 with file locking. It is optimized for single-machine library branch deployments or desktop use, not high-concurrency client-server web architectures.
+- **Calendar Boundaries**: All dates must be formatted strictly in ISO-8601 (`YYYY-MM-DD`).
+- **Terminal Display**: Tabular reports are optimized for terminals of at least 80–120 characters in width.
 
 ---
 
-## 12. Project Directory Structure
+## 13. Documentation Sitemap
+
+- [System Architecture](docs/architecture.md): Layered design, transaction isolation, RAII, and exception safety.
+- [Database Architecture](docs/database_architecture.md): Full schema (V2), Mermaid ER diagram, constraint definitions, and indexes.
+- [Testing & Verification Evidence](docs/testing_and_verification.md): Automated test matrix and manual CLI workflow execution logs.
+
+---
+
+## 14. Project Directory Structure
 
 ```text
 LibraryManagementSystem/
@@ -234,6 +248,11 @@ LibraryManagementSystem/
 ├── .gitignore                  # Git ignore rules for build and runtime data
 ├── .clang-format               # Code formatting configuration
 ├── README.md                   # Project documentation
+│
+├── docs/
+│   ├── architecture.md         # Detailed architectural documentation
+│   ├── database_architecture.md # Database schema, ER diagram & index design
+│   └── testing_and_verification.md # Test evidence and CLI workflow execution logs
 │
 ├── include/
 │   ├── cli/
@@ -327,9 +346,6 @@ LibraryManagementSystem/
 │   ├── test_loan_service.cpp
 │   ├── test_report_service.cpp # Reports & end-to-end workflow verification
 │   └── test_cli_helpers.cpp    # CLI InputHandler, TableFormatter, CurrencyFormatter
-│
-├── docs/
-│   └── database_architecture.md # Detailed database design specification
 │
 └── data/
     └── .gitkeep                # Application runtime database directory
