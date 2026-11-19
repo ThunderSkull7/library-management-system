@@ -388,6 +388,7 @@ Circulation policies are managed by the configurable domain model `LibraryPolicy
 Deep architectural specifications, database designs, and verification logs are available in the `docs/` directory:
 
 - [System Architecture](docs/architecture.md): Layered design, transaction boundaries, concurrency protections, and error handling.
+- [Backup and Recovery](docs/backup_and_recovery.md): Consistent SQLite backups, integrity checks, and a manual restore procedure.
 - [Database Architecture](docs/database_architecture.md): Full schema specifications (V2), index optimizations, constraints, and migration history.
 - [Testing & Verification Evidence](docs/testing_and_verification.md): Automated test matrix (214 tests) and end-to-end CLI workflow execution logs.
 
